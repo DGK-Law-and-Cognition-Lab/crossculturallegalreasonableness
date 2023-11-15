@@ -71,6 +71,7 @@ q31	  -   number of dollars per hour that a charity pays in attorney's fees for 
 q32	  -   number of hours of notice that a landlord provides a tenant before entering the unit for maintenance or repairs
 
 q33	  -   interest rate for a loan
+
 q34	  -   percent likelihood that a company found liable for pollution will pollute again in the future!
 
 
