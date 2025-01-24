@@ -1,78 +1,83 @@
-# Cross Cultural Legal Reasonableness Repository
+# The Nature of Reasonableness
 
-This is the repository for the Cross Cultural Legal Reasonableness across ten different countries
+This repository contains the experiments, data, analyses, and figures for the paper ["THE NATURE OF REASONABLENESS"](https://osf.io/sk7r3/) by Kevin Tobia, Ivar R. Hannikainen, David Kamper, Guilherme Almeida, Piotr Bystranowski, Niek Strohmaier, Vilius Dranseika, Markus Kneer, Fernando Aguiar, Kristina Dolinina, Bartosz Janik, Eglė Lauraitytė, Alice Liefgreen, Maciej Próchnicki, Alejandro Rosas, Vivek Kumar Shukla, and Noel Struchiner (2025, _Stanford Journal of International Law_)
 
-You can navigate to find the Data file as well as the RCode used to determine median and mean ratings for each of the questions.
+__Contents__:
 
-There are 34 questions, with question 19 being an attention check. Here are the following questions:
+- [Introduction](#introduction)
+- [Repository structure](#repository-structure)
+- [CRediT author statement](#credit-author-statement)
 
-q1	  -   number of hours of TV that a person watches in a day;
+## Introduction
 
-q2	  -   number of sugary drinks that a person consumes in a week
+“Reasonableness” sets countless legal standards in America. It also informs standards within foreign jurisdictions, from Lithuanian contract law to Dutch tort law. Most legal theorists assume that “reasonableness” is vague and variegated, a flexible term whose uses share no essential core across languages, cultures, and jurisdictions. This Essay questions this conventional wisdom. It develops a surprising new alternative theory: Reasonableness has a shared conceptual core, in the U.S. and across some other languages and cultures. A unique cross-cultural survey-experiment (N = 2,356) examines reasonableness evaluations across Brazil, Colombia, Germany, India, Italy, Lithuania, Netherlands, Poland, Spain and the U.S., finding a subtle commonality across diverse languages, cultures and legal systems. This discovery has practical implications for judge and jury decision-making in these countries. More broadly, the study represents a legal theory proof of concept: Analysis of specific legal concepts like reasonableness across cultures provides a relief on which the features of one jurisdiction’s concept more clearly manifest. Counterintuitively, local questions of particular jurisprudence can be clarified through more general, multi- cultural and multi-linguistic empirical study.
 
-q3	  -   number of hours that a person spends exercising in a week
+## Repository structure
 
-q4	  -   number of calories that a person consumes in a day
+```
+.
+├── code
+│   ├── R
+│   ├── experiments
+│   └── python
+├── data
+│   ├── experiment1
+│   ├── 
+│   ├── 
+│   ├── 
+│   ├──
+│   └── experiment
+├── docs
+│   ├── R
+│   ├── experiment1
+│   ├── 
+│   └── 
+└── figures
+    ├── diagrams
+    ├── paper
+    └── stimuli
+```
 
-q5	  -   number of servings of vegetables that a person consumes in a month
+### code
 
-q6	  -   number of lies that a person tells in a week
+#### R
 
-q7	  -   number of minutes that a doctor is late to see his/her patients
+- Statistical analysis and visualizations. 
 
-q8	  -   number of books that a person reads in a year
+#### experiments
 
-q9	  -   number of romantic partners that a person has in their life
+- Experiment code. 
 
-q10	  -   number of international conflicts that a country has in a decade
+#### python
 
-q11	  -   amount of money (in dollars) that a person cheats on his/her taxes
+### data
 
-q12	  -   percentage of students who have cheated on an exam in any given high school
+- Raw data files and model prediction files. 
 
-q13	  -   number of times a person checks his/her phone in a day
+### figures
 
-q14	  -   number of minutes that a person spends waiting on the phone for customer service
+- Paper figures and images of the stimuli. 
 
-q15	  -   number of times that a person calls his/her parents in a month
+## CRediT author statement
 
-q16	  -   number of times that a person cleans his/her home in a month
+Please see [here](https://www.elsevier.com/researcher/author/policies-and-guidelines/credit-author-statement) for definitions of the different terms.
 
-q17	  -   number of times that a computer crashes in a month
-
-q18	  -   percentage of high school dropouts there are in any given high school
-
-q19	  -   Enter the number 15 to show you are paying attention.
-
-q20	  -   percentage of kids in any given middle school who are bullied
-
-q21	  -   number of drinks that a fraternity br  drinks on a weekend
-
-q22	  -   number of days taken to accept a business contract when no deadline is specified
-
-q23	  -   number of weeks taken to return a product ordered online when the warrantee does not specify
-
-q24	  -   number of hours taken to reflect on an exciting but risky business proposition
-
-q25	  -   amount of unexpected additional costs in a $10,000 building contract
-
-q26	  -   number of weeks that a building construction project is delayed beyond its stated completion date
-
-q27	  -   number of loud events held at a football field close to a quiet neighborhood, per year
-
-q28	  -   percent of profits that a car manufacturer spends on additional safety features
-
-q29	  -   percent of available medical details that a patient wants to hear from his/her doctor
-
-q30	  -   number of weeks that a person has to wait before being tried for a criminal charge
-
-q31	  -   number of dollars per hour that a charity pays in attorney's fees for   work for the charity
-
-q32	  -   number of hours of notice that a landlord provides a tenant before entering the unit for maintenance or repairs
-
-q33	  -   interest rate for a loan
-
-q34	  -   percent likelihood that a company found liable for pollution will pollute again in the future!
+| Term                       | | | | | |
+|----------------------------|------|--------|-----|--------|--------|
+| Conceptualization          |      |      | |   |    |
+| Methodology                |     |    |    |        |       |
+| Software                   |     |      |     |       |      |
+| Validation                 |      |        |     |        |       |
+| Formal analysis            |    |       |     |        |      |
+| Investigation              |    |        |     |        |        |
+| Resources                  |      |        |     |        |        |
+| Data Curation              |    |        |     |        |      |
+| Writing - Original Draft   |      |        |     |        |       |
+| Writing - Review & Editing |    |      |   |       |       |
+| Visualization              |    |        |     |        |       |
+| Supervision                |      |        |     |        |       |
+| Project administration     |      |        |     |        |       |
+| Funding acquisition        |      |        |     |        |       |
 
 
 
