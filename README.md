@@ -12,51 +12,47 @@ __Contents__:
 
 “Reasonableness” sets countless legal standards in America. It also informs standards within foreign jurisdictions, from Lithuanian contract law to Dutch tort law. Most legal theorists assume that “reasonableness” is vague and variegated, a flexible term whose uses share no essential core across languages, cultures, and jurisdictions. This Essay questions this conventional wisdom. It develops a surprising new alternative theory: Reasonableness has a shared conceptual core, in the U.S. and across some other languages and cultures. A unique cross-cultural survey-experiment (N = 2,356) examines reasonableness evaluations across Brazil, Colombia, Germany, India, Italy, Lithuania, Netherlands, Poland, Spain and the U.S., finding a subtle commonality across diverse languages, cultures and legal systems. This discovery has practical implications for judge and jury decision-making in these countries. More broadly, the study represents a legal theory proof of concept: Analysis of specific legal concepts like reasonableness across cultures provides a relief on which the features of one jurisdiction’s concept more clearly manifest. Counterintuitively, local questions of particular jurisprudence can be clarified through more general, multi- cultural and multi-linguistic empirical study.
 
-## Repository structure
+## Preregistrations
+
+Preregistrations for the experiment is available on ... :
+
+- [Experiment]()
+
+## Repository Structure
 
 ```
 .
-├── code
-│   ├── R
-│   ├── experiments
-│   └── python
-├── data
-│   ├── experiment1
-│   ├── 
-│   ├── 
-│   ├── 
-│   ├──
-│   └── experiment
-├── docs
-│   ├── R
-│   ├── experiment1
-│   ├── 
-│   └── 
-└── figures
-    ├── diagrams
-    ├── paper
-    └── stimuli
+├── README.md
+├── Code
+│   └──  R
+├── Qualtrics
+├── Data
+└── Figures
 ```
 
-### code
+### Code
 
 #### R
 
-- Statistical analysis and visualizations. 
+`LegalReasonableness_Final.Rmd` is the primary analyses files. They contain the analyses and visualizations for all experiments in the paper.
 
-#### experiments
+### Data
 
-- Experiment code. 
+Contains raw data files for the experiment.
 
-#### python
+### Figures
 
-### data
+These contain the data visualizations generated in R and included in the paper.
 
-- Raw data files and model prediction files. 
+### Paper Results
 
-### figures
+All results is analyzed and in visualized `LegalReasonableness_Final.Rmd` All paper results are included in the document. Knitted HTML document can be viewed `LegalReasonableness_Final.html`.
 
-- Paper figures and images of the stimuli. 
+## Software versions 
+
+Analysis was performed in R version 4.2.2.
+
+R package versions are indicated in the knitted analysis file at `LegalReasonableness_Final.html`.
 
 ## CRediT author statement
 
