@@ -14,9 +14,7 @@ __Contents__:
 
 ## Preregistrations
 
-Preregistrations for the experiment is available on [OSF](https://osf.io/sk7r3/).
-
-- [Experiment]()
+Preregistrations for the experiments are available on [The Open Science Framework](https://osf.io/sk7r3/).
 
 ## Repository Structure
 
