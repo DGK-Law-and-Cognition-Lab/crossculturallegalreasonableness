@@ -14,7 +14,7 @@ __Contents__:
 
 ## Preregistrations
 
-Preregistrations for the experiment is available on ... :
+Preregistrations for the experiment is available on [OSF](https://osf.io/sk7r3/).
 
 - [Experiment]()
 
