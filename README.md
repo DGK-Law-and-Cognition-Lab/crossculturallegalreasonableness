@@ -1,6 +1,6 @@
 # The Nature of Reasonableness
 
-This repository contains the experiments, data, analyses, and figures for the paper ["THE NATURE OF REASONABLENESS"](https://osf.io/sk7r3/) by Kevin Tobia, Ivar R. Hannikainen, David Kamper, Guilherme Almeida, Piotr Bystranowski, Niek Strohmaier, Vilius Dranseika, Markus Kneer, Fernando Aguiar, Kristina Dolinina, Bartosz Janik, Eglė Lauraitytė, Alice Liefgreen, Maciej Próchnicki, Alejandro Rosas, Vivek Kumar Shukla, and Noel Struchiner (2025, _Stanford Journal of International Law_)
+This repository contains the experiments, data, analyses, and figures for the paper ["THE NATURE OF REASONABLENESS"]([https://osf.io/sk7r3/](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5185137)) by Kevin Tobia, Ivar R. Hannikainen, David Kamper, Guilherme Almeida, Piotr Bystranowski, Niek Strohmaier, Vilius Dranseika, Markus Kneer, Fernando Aguiar, Kristina Dolinina, Bartosz Janik, Eglė Lauraitytė, Alice Liefgreen, Maciej Próchnicki, Alejandro Rosas, Vivek Kumar Shukla, and Noel Struchiner (2025, _Stanford Journal of International Law_)
 
 __Contents__:
 
