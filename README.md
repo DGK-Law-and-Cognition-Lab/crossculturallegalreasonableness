@@ -5,7 +5,8 @@ This repository contains the experiments, data, analyses, and figures for the pa
 __Contents__:
 
 - [Introduction](#introduction)
-- [Repository structure](#repository-structure)
+- [Preregistratios](##preregistrations)
+- [Repository Structure](##repository-structure)
 
 ## Introduction
 
