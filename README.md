@@ -23,7 +23,6 @@ Preregistrations for the experiments are available on [The Open Science Framewor
 ├── README.md
 ├── Code
 │   └──  R
-├── Qualtrics
 ├── Data
 └── Figures
 ```
