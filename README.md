@@ -49,5 +49,5 @@ All results is analyzed and in visualized `Final_Reasonableness.Rmd` All paper r
 
 Analysis was performed in R version 4.2.2.
 
-R package versions are indicated in the knitted analysis file at `LegalReasonableness_Final.html`.
+R package versions are indicated in the knitted analysis file at `Final_Reasonableness.html`.
 
