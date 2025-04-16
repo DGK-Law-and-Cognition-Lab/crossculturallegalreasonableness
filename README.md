@@ -44,7 +44,7 @@ These contain the data visualizations generated in R and included in the paper.
 
 ### Paper Results
 
-All results is analyzed and in visualized `Final_Reasonableness.Rmd` All paper results are included in the document. Knitted HTML document can be viewed `Final_Reasonableness.html`, and can be accessed on the web [here](https://dgk-law-and-cognition-lab.github.io/natureofreasonableness_crosscultural/Code/R/LegalReasonableness_Final.html).
+All results is analyzed and in visualized `Final_Reasonableness.Rmd` All paper results are included in the document. Knitted HTML document can be viewed `Final_Reasonableness.html`, and can be accessed on the web [here](https://dgk-law-and-cognition-lab.github.io/natureofreasonableness_crosscultural/Code/R/Final_Reasonableness.html).
 
 ## Software versions 
 
