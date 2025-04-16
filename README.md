@@ -6,7 +6,6 @@ __Contents__:
 
 - [Introduction](#introduction)
 - [Repository structure](#repository-structure)
-- [CRediT author statement](#credit-author-statement)
 
 ## Introduction
 
@@ -32,7 +31,7 @@ Preregistrations for the experiments are available on [The Open Science Framewor
 
 #### R
 
-`LegalReasonableness_Final.Rmd` is the primary analyses files. They contain the analyses and visualizations for all experiments in the paper.
+`LegalReasonableness_Final.Rmd` is the primary analyses file. They contain the analyses for all experiments in the paper. Knitted HTML document can be viewed `Final_Reasonableness.html`,
 
 ### Data
 
@@ -40,38 +39,15 @@ Contains raw data files for the experiment.
 
 ### Figures
 
-These contain the data visualizations generated in R and included in the paper.
+These contain the data visualizations generated in R and included in the paper. 
 
 ### Paper Results
 
-All results is analyzed and in visualized `LegalReasonableness_Final.Rmd` All paper results are included in the document. Knitted HTML document can be viewed `LegalReasonableness_Final.html`, and can be accessed on the web [here](https://dgkamper.github.io/crossculturallegalreasonableness/Code/R/LegalReasonableness_Final.html).
+All results is analyzed and in visualized `Final_Reasonableness.Rmd` All paper results are included in the document. Knitted HTML document can be viewed `Final_Reasonableness.html`, and can be accessed on the web [here](https://dgk-law-and-cognition-lab.github.io/natureofreasonableness_crosscultural/Code/R/LegalReasonableness_Final.html).
 
 ## Software versions 
 
 Analysis was performed in R version 4.2.2.
 
 R package versions are indicated in the knitted analysis file at `LegalReasonableness_Final.html`.
-
-## CRediT author statement
-
-Please see [here](https://www.elsevier.com/researcher/author/policies-and-guidelines/credit-author-statement) for definitions of the different terms.
-
-| Term                       | | | | | |
-|----------------------------|------|--------|-----|--------|--------|
-| Conceptualization          |      |      | |   |    |
-| Methodology                |     |    |    |        |       |
-| Software                   |     |      |     |       |      |
-| Validation                 |      |        |     |        |       |
-| Formal analysis            |    |       |     |        |      |
-| Investigation              |    |        |     |        |        |
-| Resources                  |      |        |     |        |        |
-| Data Curation              |    |        |     |        |      |
-| Writing - Original Draft   |      |        |     |        |       |
-| Writing - Review & Editing |    |      |   |       |       |
-| Visualization              |    |        |     |        |       |
-| Supervision                |      |        |     |        |       |
-| Project administration     |      |        |     |        |       |
-| Funding acquisition        |      |        |     |        |       |
-
-
 
