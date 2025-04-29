@@ -7,7 +7,7 @@ __Contents__:
 - [Introduction](#introduction)
 - [Preregistrations](#preregistrations)
 - [Repository Structure](#repository-structure)
-- [Paper Results](#Paper-Results)
+- [Paper Results](##paper-results)
 
 ## Introduction
 
@@ -42,7 +42,7 @@ Contains raw data files for the experiment.
 
 This contains the data visualization generated in R and included in the paper. See [here](https://dgk-law-and-cognition-lab.github.io/natureofreasonableness_crosscultural/Figures/Figure1.jpg) for your own viewing.
 
-# Paper Results
+## Paper Results
 
 All results is analyzed and in visualized `Final_Reasonableness.Rmd`. All paper results are included in the document. Knitted HTML document can be viewed `Final_Reasonableness.html`, and can be accessed [here](https://dgk-law-and-cognition-lab.github.io/natureofreasonableness_crosscultural/Code/R/Final_Reasonableness.html) for your own viewing.
 
