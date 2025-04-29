@@ -31,7 +31,7 @@ Preregistrations for the experiments are available on [The Open Science Framewor
 
 #### R
 
-`LegalReasonableness_Final.Rmd` is the primary analyses file. They contain the analyses for all experiments in the paper. Knitted HTML document can be viewed `Final_Reasonableness.html`.
+`Final_Reasonableness.Rmd` is the primary analyses file. They contain the analyses for all experiments in the paper. Knitted HTML document can be viewed `Final_Reasonableness.html`.
 
 ### Data
 
