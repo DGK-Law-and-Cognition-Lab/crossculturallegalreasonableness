@@ -7,6 +7,7 @@ __Contents__:
 - [Introduction](#introduction)
 - [Preregistrations](#preregistrations)
 - [Repository Structure](#repository-structure)
+- [Paper Results](##paper-results)
 
 ## Introduction
 
@@ -31,7 +32,7 @@ Preregistrations for the experiments are available on [The Open Science Framewor
 
 #### R
 
-`LegalReasonableness_Final.Rmd` is the primary analyses file. They contain the analyses for all experiments in the paper. Knitted HTML document can be viewed `Final_Reasonableness.html`.
+`ReasonablenessMedians.Rmd` is the primary analyses file. In this file, it contains all the analyses for the experiments in the paper. A knitted HTML document can be downloaded at `ReasonablenessMedians.html` within the github repository.
 
 ### Data
 
@@ -39,15 +40,15 @@ Contains raw data files for the experiment.
 
 ### Figures
 
-This contains the data visualization generated in R and included in the paper. See [here](https://dgk-law-and-cognition-lab.github.io/natureofreasonableness_crosscultural/Figures/Figure1.jpg).
+This contains the data visualization generated in R and included in the paper. See [here](https://dgk-law-and-cognition-lab.github.io/natureofreasonableness_crosscultural/Figures/Figure1_Reasonableness_Filtered.jpg) and [here](https://dgk-law-and-cognition-lab.github.io/natureofreasonableness_crosscultural/Figures/Figure1_Reasonableness_NoFilter.jpg)for your own viewing.
 
-### Paper Results
+## Paper Results
 
-All results is analyzed and in visualized `Final_Reasonableness.Rmd` All paper results are included in the document. Knitted HTML document can be viewed `Final_Reasonableness.html`, and can be accessed on the web [here](https://dgk-law-and-cognition-lab.github.io/natureofreasonableness_crosscultural/Code/R/Final_Reasonableness.html).
+All results is analyzed and in visualized ``ReasonablenessMedians.Rmd`. All paper results are included in the document. Knitted HTML document can be viewed ``ReasonablenessMedians.html`, and can be accessed [here](https://dgk-law-and-cognition-lab.github.io/natureofreasonableness_crosscultural/Code/R/ReasonablenessMedians.html) for your own viewing.
 
 ## Software versions 
 
 Analysis was performed in R version 4.2.2.
 
-R package versions are indicated in the knitted analysis file at `Final_Reasonableness.html`.
+R package versions are indicated in the knitted analysis file at `ReasonablenessMedians.html`.
 
