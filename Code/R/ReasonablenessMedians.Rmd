@@ -1,0 +1,2266 @@
+---
+title: "Final_Reasonableness_Medians"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 5
+    df_print: paged
+  pdf_document: default
+---
+This is the formal analysis file for the "The Nature of Reasonableness" by by Kevin Tobia, Ivar R. Hannikainen, David Kamper, Guilherme Almeida, Piotr Bystranowski, Niek Strohmaier, Vilius Dranseika, Markus Kneer, Fernando Aguiar, Kristina Dolinina, Bartosz Janik, Eglė Lauraitytė, Alice Liefgreen, Maciej Próchnicki, Alejandro Rosas, Vivek Kumar Shukla, and Noel Struchiner (2025, Stanford Journal of International Law).
+
+## Introduction and Loading of Files
+
+```{r}
+# Load Libraries
+
+library(dplyr)
+library(tidyverse)
+library(stats)
+library(ggplot2)
+library(ggthemes)
+library(corrplot)
+library(gridExtra)
+library(kableExtra)
+library(effects)
+library(scales)
+```
+
+```{r}
+DATA_PATH <- "/Users/dgkamper/Library/CloudStorage/GoogleDrive-dgkamper@gmail.com/My Drive/DGK Lab/Collaborations/Language and Law Laboratory/Analysis/LegalResonablenessAnalysis/Data_all_numeric.csv"
+```
+
+#### 1. Initial Data Loading and Preparation
+
+```{r}
+# Read the data from specified path
+Data_All <- read.csv(DATA_PATH, stringsAsFactors = FALSE)
+
+# Verify data structure
+glimpse(Data_All)
+```
+
+#### 2. Exclude participants whose answer to Q19 does not equal 15 [comprehension/attention question].
+
+```{r}
+# Split data by condition
+Data_All_Average <- Data_All %>% filter(Condition_name == "Average")
+Data_All_Ideal <- Data_All %>% filter(Condition_name == "Ideal")
+Data_All_Reasonable <- Data_All %>% filter(Condition_name == "Reasonable")
+
+# Exclude participants whose answer to Q19 does not equal 15 [comprehension/attention question].
+Data_All_Average_Pass1 <- Data_All_Average %>% filter(q19 == 15)
+Data_All_Ideal_Pass1 <- Data_All_Ideal %>% filter(q19 == 15)
+Data_All_Reasonable_Pass1 <- Data_All_Reasonable %>% filter(q19 == 15)
+
+# Print participant counts
+condition_counts <- data.frame(
+  Condition = c("Average", "Ideal", "Reasonable"),
+  Original_Count = c(nrow(Data_All_Average), nrow(Data_All_Ideal), nrow(Data_All_Reasonable)),
+  After_Attention_Check = c(nrow(Data_All_Average_Pass1), nrow(Data_All_Ideal_Pass1), nrow(Data_All_Reasonable_Pass1)),
+  Excluded_Count = c(nrow(Data_All_Average) - nrow(Data_All_Average_Pass1),
+                     nrow(Data_All_Ideal) - nrow(Data_All_Ideal_Pass1),
+                     nrow(Data_All_Reasonable) - nrow(Data_All_Reasonable_Pass1)),
+  Exclusion_Rate = c((nrow(Data_All_Average) - nrow(Data_All_Average_Pass1))/nrow(Data_All_Average),
+                     (nrow(Data_All_Ideal) - nrow(Data_All_Ideal_Pass1))/nrow(Data_All_Ideal),
+                     (nrow(Data_All_Reasonable) - nrow(Data_All_Reasonable_Pass1))/nrow(Data_All_Reasonable))
+)
+
+# Format the exclusion rate as percentage
+condition_counts$Exclusion_Rate <- scales::percent(condition_counts$Exclusion_Rate)
+
+# Display the participant counts table
+kable(condition_counts, caption = "Participant Counts Before and After Attention Check") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+```
+
+```{r}
+# Define the question columns - ensuring they actually exist in the data
+question_cols <- c("q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", 
+                  "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", 
+                  "q20", "q21", "q22", "q23", "q24", "q25", "q26", "q27", 
+                  "q28", "q29", "q30", "q31", "q32", "q33", "q34")
+
+# Check if all question columns exist in the data
+existing_cols <- question_cols[question_cols %in% colnames(Data_All_Average_Pass1)]
+missing_cols <- question_cols[!question_cols %in% colnames(Data_All_Average_Pass1)]
+
+print("Existing question columns:")
+print(existing_cols)
+print("Missing question columns:")
+print(missing_cols)
+```
+#### 3. Check Number of Participants per Condition 
+
+```{r}
+# Continue with only the existing columns
+question_cols <- existing_cols
+
+# Convert columns to numeric
+Data_All_Average_Pass1 <- Data_All_Average_Pass1 %>%
+  mutate(across(all_of(question_cols), ~as.numeric(as.character(.))))
+
+Data_All_Ideal_Pass1 <- Data_All_Ideal_Pass1 %>%
+  mutate(across(all_of(question_cols), ~as.numeric(as.character(.))))
+
+Data_All_Reasonable_Pass1 <- Data_All_Reasonable_Pass1 %>%
+  mutate(across(all_of(question_cols), ~as.numeric(as.character(.))))
+
+# Verify the number of participants in each condition
+cat("Ideal condition:", nrow(Data_All_Ideal_Pass1), "participants\n")
+cat("Average condition:", nrow(Data_All_Average_Pass1), "participants\n")
+cat("Reasonable condition:", nrow(Data_All_Reasonable_Pass1), "participants\n")
+```
+
+#### 4a. Filter Data [Due to medians, exclusions of outliers]
+
+No parts to be completed here: done in Analysis 3.
+
+#### 4b. Filter Data [Any response that is > 3SD from QMean, exclude]
+
+```{r}
+# Function to filter data based on 3 SD criterion
+filter_data <- function(data, cols) {
+  # Pre-allocate a list to track excluded participants for each question
+  exclusions_by_question <- list()
+  
+  # Original count
+  original_count <- nrow(data)
+  
+  result <- data
+  for (col in cols) {
+    if (col %in% colnames(data)) {
+      # Calculate mean and standard deviation
+      avg <- mean(result[[col]], na.rm = TRUE)
+      s <- sd(result[[col]], na.rm = TRUE)
+      
+      # Identify outliers
+      outlier_indices <- which(!is.na(result[[col]]) & abs(result[[col]] - avg) > 3 * s)
+      exclusions_by_question[[col]] <- length(outlier_indices)
+      
+      # Filter out outliers
+      result <- result %>%
+        filter(is.na(!!sym(col)) | abs(!!sym(col) - avg) <= 3 * s)
+    }
+  }
+  
+  # Final count
+  final_count <- nrow(result)
+  
+  return(list(
+    filtered_data = result,
+    original_count = original_count,
+    final_count = final_count,
+    excluded_count = original_count - final_count,
+    exclusion_rate = (original_count - final_count) / original_count,
+    exclusions_by_question = exclusions_by_question
+  ))
+}
+
+# Apply filtering and track exclusion counts
+avg_filter_results <- filter_data(Data_All_Average_Pass1, question_cols)
+ideal_filter_results <- filter_data(Data_All_Ideal_Pass1, question_cols)
+reasonable_filter_results <- filter_data(Data_All_Reasonable_Pass1, question_cols)
+
+# Extract the filtered data
+Data_All_Average_Filtered <- avg_filter_results$filtered_data
+Data_All_Ideal_Filtered <- ideal_filter_results$filtered_data
+Data_All_Reasonable_Filtered <- reasonable_filter_results$filtered_data
+
+# Display outlier exclusion summary
+outlier_summary <- data.frame(
+  Condition = c("Average", "Ideal", "Reasonable"),
+  Original_Count = c(avg_filter_results$original_count, 
+                    ideal_filter_results$original_count, 
+                    reasonable_filter_results$original_count),
+  After_Outlier_Removal = c(avg_filter_results$final_count, 
+                           ideal_filter_results$final_count, 
+                           reasonable_filter_results$final_count),
+  Excluded_Count = c(avg_filter_results$excluded_count, 
+                    ideal_filter_results$excluded_count, 
+                    reasonable_filter_results$excluded_count),
+  Exclusion_Rate = c(avg_filter_results$exclusion_rate,
+                    ideal_filter_results$exclusion_rate,
+                    reasonable_filter_results$exclusion_rate)
+)
+
+# Format the exclusion rate as percentage
+outlier_summary$Exclusion_Rate <- scales::percent(outlier_summary$Exclusion_Rate)
+
+# Display the outlier exclusion summary table
+kable(outlier_summary, caption = "Participant Counts Before and After Outlier Removal") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+```
+
+```{r}
+# Define helper function for coefficients
+get_model_coefs <- function(model) {
+  summary_model <- summary(model)
+  coef_table <- summary_model$coefficients
+  data.frame(
+    Term = rownames(coef_table),
+    Estimate = coef_table[, "Estimate"],
+    Std_Error = coef_table[, "Std. Error"],
+    t_value = coef_table[, "t value"],
+    p_value = coef_table[, "Pr(>|t|)"]
+  )
+}
+
+# Define helper function for p-values
+format_pvalue <- function(p_value) {
+  if (is.na(p_value)) {
+    return("NA")
+  } else if (p_value < 0.001) {
+    return("< .001")
+  } else {
+    # Format to 3 decimal places, removing leading zero if present
+    formatted_p <- sprintf("%.3f", p_value)
+    # Remove leading zero for values less than 1 (e.g., "0.123" -> ".123")
+    formatted_p <- sub("^0\\.", ".", formatted_p)
+     # Handle case where p-value rounds to 1.000
+    if (formatted_p == "1.000" && p_value < 1) {
+        return(".999") # Or indicate somehow it's slightly less than 1
+    } else if (formatted_p == "1.000" && p_value >= 1) {
+         return("1.000") # Or handle as appropriate if p can be >= 1
+    }
+    return(formatted_p)
+  }
+}
+```
+
+# Analysis 3 [NO 3 SD Removed]: Overall results, with median ratings
+
+#### 1. Compute the median rating
+
+```{r}
+# Calculate medians from attention-check filtered data ONLY
+column_medians_average_no3sd <- sapply(Data_All_Average_Pass1[, question_cols], median, na.rm = TRUE)
+column_medians_ideal_no3sd <- sapply(Data_All_Ideal_Pass1[, question_cols], median, na.rm = TRUE)
+column_medians_reasonable_no3sd <- sapply(Data_All_Reasonable_Pass1[, question_cols], median, na.rm = TRUE)
+
+# Create a dataframe for the medians (NO 3SD)
+medians_df_no3sd <- data.frame(
+  Question = names(column_medians_average_no3sd),
+  Average = column_medians_average_no3sd,
+  Ideal = column_medians_ideal_no3sd,
+  Reasonable = column_medians_reasonable_no3sd
+)
+
+# Display the medians for each question
+kable(medians_df_no3sd, caption = "Median Values (NO 3SD Removal)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+```
+
+#### 2a. (Small constant inf values): Convert median responses to a natural log scale (NO 3SD Removal)
+
+```{r}
+# Define Log function: Small constant for zero
+log_smallvalue <- function(x) {
+  x_safe <- x
+  # Replace only actual zeros, leave NAs as NA
+  x_safe[which(x == 0 & !is.na(x))] <- 0.01
+  log(x_safe)
+}
+
+# Apply the log function to NO 3SD medians
+log_medians_average_no3sd_smallval <- log_smallvalue(column_medians_average_no3sd)
+log_medians_ideal_no3sd_smallval <- log_smallvalue(column_medians_ideal_no3sd)
+log_medians_reasonable_no3sd_smallval <- log_smallvalue(column_medians_reasonable_no3sd)
+
+# Create a dataframe for the log medians (NO 3SD, Small Constant)
+log_medians_df_no3sd_smallval <- data.frame(
+  Question = names(log_medians_average_no3sd_smallval),
+  Average = log_medians_average_no3sd_smallval,
+  Ideal = log_medians_ideal_no3sd_smallval,
+  Reasonable = log_medians_reasonable_no3sd_smallval
+)
+
+# Display the log medians
+kable(log_medians_df_no3sd_smallval, caption = "Log-Transformed (Small Constant) Median Values (NO 3SD Removal)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+```
+
+#### 2b. (Plus one to all values): Convert median responses to a natural log scale (NO 3SD Removal)
+
+```{r}
+# Define Log function: Add 1
+log_plus_one <- function(x) {
+  log(x + 1)
+}
+
+# Apply the log function to NO 3SD medians
+log_medians_average_no3sd_plusone <- log_plus_one(column_medians_average_no3sd)
+log_medians_ideal_no3sd_plusone <- log_plus_one(column_medians_ideal_no3sd)
+log_medians_reasonable_no3sd_plusone <- log_plus_one(column_medians_reasonable_no3sd)
+
+# Create a dataframe for the log medians (NO 3SD, Plus One)
+log_medians_df_no3sd_plusone <- data.frame(
+  Question = names(log_medians_average_no3sd_plusone),
+  Average = log_medians_average_no3sd_plusone,
+  Ideal = log_medians_ideal_no3sd_plusone,
+  Reasonable = log_medians_reasonable_no3sd_plusone
+)
+
+# Display the log medians
+kable(log_medians_df_no3sd_plusone, caption = "Log-Transformed (Plus One) Median Values (NO 3SD Removal)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+```
+
+#### 3a. (Small constant inf values): Conduct three regressions and record AIC (NO 3SD Removal)
+
+```{r}
+# Create data frame for regression (NO 3SD, Small Constant)
+dataforAICMedians_no3sd_smallval <- data.frame(
+  Reasonable = log_medians_reasonable_no3sd_smallval,
+  Average = log_medians_average_no3sd_smallval,
+  Ideal = log_medians_ideal_no3sd_smallval
+)
+
+# Filter out rows with non-finite values before regression
+dataforAICMedians_no3sd_smallval_clean <- dataforAICMedians_no3sd_smallval %>%
+  filter(is.finite(Reasonable) & is.finite(Average) & is.finite(Ideal))
+
+# Check if enough data points remain
+if(nrow(dataforAICMedians_no3sd_smallval_clean) > 3) {
+
+  # Model I
+  Model1Medians_no3sd_smallval <- lm(Reasonable ~ Average, data = dataforAICMedians_no3sd_smallval_clean)
+  AIC1Medians_no3sd_smallval <- AIC(Model1Medians_no3sd_smallval)
+  r2_model1_median_no3sd_smallval <- summary(Model1Medians_no3sd_smallval)$r.squared
+
+  # Model II
+  Model2Medians_no3sd_smallval <- lm(Reasonable ~ Ideal, data = dataforAICMedians_no3sd_smallval_clean)
+  AIC2Medians_no3sd_smallval <- AIC(Model2Medians_no3sd_smallval)
+  r2_model2_median_no3sd_smallval <- summary(Model2Medians_no3sd_smallval)$r.squared
+
+  # Model III
+  Model3Medians_no3sd_smallval <- lm(Reasonable ~ Average + Ideal, data = dataforAICMedians_no3sd_smallval_clean)
+  AIC3Medians_no3sd_smallval <- AIC(Model3Medians_no3sd_smallval)
+  r2_model3_median_no3sd_smallval <- summary(Model3Medians_no3sd_smallval)$r.squared
+
+  # Create a regression summary dataframe
+  regression_summary_medians_no3sd_smallval <- data.frame(
+    Model = c("Average predicts Reasonable",
+              "Ideal predicts Reasonable",
+              "Average + Ideal predict Reasonable"),
+    AIC = c(AIC1Medians_no3sd_smallval, AIC2Medians_no3sd_smallval, AIC3Medians_no3sd_smallval),
+    R_squared = c(r2_model1_median_no3sd_smallval, r2_model2_median_no3sd_smallval, r2_model3_median_no3sd_smallval)
+  )
+
+  # Display the regression summary table
+  kable(regression_summary_medians_no3sd_smallval, caption = "Regression Comparison (Median, NO 3SD, Log Small Constant)") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+} else {
+  cat("Not enough valid data points for regression (NO 3SD, Log Small Constant).\n")
+  regression_summary_medians_no3sd_smallval <- data.frame(Model=character(), AIC=numeric(), R_squared=numeric())
+}
+```
+
+#### 3b. (Plus one to all values): Conduct three regressions and record AIC (NO 3SD Removal)
+
+```{r}
+# Create data frame for regression (NO 3SD, Plus One)
+dataforAICMedians_no3sd_plusone <- data.frame(
+  Reasonable = log_medians_reasonable_no3sd_plusone,
+  Average = log_medians_average_no3sd_plusone,
+  Ideal = log_medians_ideal_no3sd_plusone
+)
+
+# Filter out rows with non-finite values before regression
+dataforAICMedians_no3sd_plusone_clean <- dataforAICMedians_no3sd_plusone %>%
+  filter(is.finite(Reasonable) & is.finite(Average) & is.finite(Ideal))
+
+# Check if enough data points remain
+if(nrow(dataforAICMedians_no3sd_plusone_clean) > 3) {
+
+  # Model I
+  Model1Medians_no3sd_plusone <- lm(Reasonable ~ Average, data = dataforAICMedians_no3sd_plusone_clean)
+  AIC1Medians_no3sd_plusone <- AIC(Model1Medians_no3sd_plusone)
+  r2_model1_median_no3sd_plusone <- summary(Model1Medians_no3sd_plusone)$r.squared
+
+  # Model II
+  Model2Medians_no3sd_plusone <- lm(Reasonable ~ Ideal, data = dataforAICMedians_no3sd_plusone_clean)
+  AIC2Medians_no3sd_plusone <- AIC(Model2Medians_no3sd_plusone)
+  r2_model2_median_no3sd_plusone <- summary(Model2Medians_no3sd_plusone)$r.squared
+
+  # Model III
+  Model3Medians_no3sd_plusone <- lm(Reasonable ~ Average + Ideal, data = dataforAICMedians_no3sd_plusone_clean)
+  AIC3Medians_no3sd_plusone <- AIC(Model3Medians_no3sd_plusone)
+  r2_model3_median_no3sd_plusone <- summary(Model3Medians_no3sd_plusone)$r.squared
+
+  # Create a regression summary dataframe
+  regression_summary_medians_no3sd_plusone <- data.frame(
+    Model = c("Average predicts Reasonable",
+              "Ideal predicts Reasonable",
+              "Average + Ideal predict Reasonable"),
+    AIC = c(AIC1Medians_no3sd_plusone, AIC2Medians_no3sd_plusone, AIC3Medians_no3sd_plusone),
+    R_squared = c(r2_model1_median_no3sd_plusone, r2_model2_median_no3sd_plusone, r2_model3_median_no3sd_plusone)
+  )
+
+  # Display the regression summary table
+  kable(regression_summary_medians_no3sd_plusone, caption = "Regression Comparison (Median, NO 3SD, Log Plus One)") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+} else {
+   cat("Not enough valid data points for regression (NO 3SD, Log Plus One).\n")
+   regression_summary_medians_no3sd_plusone <- data.frame(Model=character(), AIC=numeric(), R_squared=numeric())
+}
+```
+
+#### 4a. (Small constant inf values): Plots and Reporting (NO 3SD Removal)
+
+```{r}
+# Check if models exist before plotting
+if(exists("Model1Medians_no3sd_smallval") && exists("dataforAICMedians_no3sd_smallval_clean") && nrow(dataforAICMedians_no3sd_smallval_clean) > 0) {
+
+  # Average Median vs Reasonable Median
+  plot1_median_no3sd_smallval <- ggplot(dataforAICMedians_no3sd_smallval_clean, aes(x = Average, y = Reasonable)) +
+    geom_point(size = 3, alpha = 0.7) + geom_smooth(method = "lm", se = TRUE, color = "blue") +
+    labs(title = "Model 1 (NO 3SD, Log Small Const): Median Average vs Reasonable",
+         subtitle = paste("AIC =", round(AIC1Medians_no3sd_smallval, 2), ", R² =", round(r2_model1_median_no3sd_smallval, 3)),
+         x = "Log (Small Const) Median Average Rating", y = "Log (Small Const) Median Reasonable Rating") +
+    theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Ideal Median vs Reasonable Median
+  plot2_median_no3sd_smallval <- ggplot(dataforAICMedians_no3sd_smallval_clean, aes(x = Ideal, y = Reasonable)) +
+    geom_point(size = 3, alpha = 0.7) + geom_smooth(method = "lm", se = TRUE, color = "red") +
+    labs(title = "Model 2 (NO 3SD, Log Small Const): Median Ideal vs Reasonable",
+         subtitle = paste("AIC =", round(AIC2Medians_no3sd_smallval, 2), ", R² =", round(r2_model2_median_no3sd_smallval, 3)),
+         x = "Log (Small Const) Median Ideal Rating", y = "Log (Small Const) Median Reasonable Rating") +
+    theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Model 3 (Average effect)
+  new_data_median_no3sd_smallval <- expand.grid( Average = seq(min(dataforAICMedians_no3sd_smallval_clean$Average, na.rm=TRUE), max(dataforAICMedians_no3sd_smallval_clean$Average, na.rm=TRUE), length.out = 100), Ideal = median(dataforAICMedians_no3sd_smallval_clean$Ideal, na.rm=TRUE) )
+  new_data_median_no3sd_smallval <- new_data_median_no3sd_smallval[is.finite(new_data_median_no3sd_smallval$Average) & is.finite(new_data_median_no3sd_smallval$Ideal),]
+  if(nrow(new_data_median_no3sd_smallval)>0){ new_data_median_no3sd_smallval$predicted_reasonable <- predict(Model3Medians_no3sd_smallval, newdata = new_data_median_no3sd_smallval) } else { new_data_median_no3sd_smallval <- data.frame(Average=numeric(), Ideal=numeric(), predicted_reasonable=numeric())}
+  plot3_median_no3sd_smallval <- ggplot(dataforAICMedians_no3sd_smallval_clean, aes(x = Average, y = Reasonable)) + geom_point(size = 3, alpha = 0.5) + geom_line(data = new_data_median_no3sd_smallval, aes(y = predicted_reasonable), color = "blue", size = 1) + labs(title = "Model 3 (NO 3SD, Log Small Const): Effect of Median Average", subtitle = paste("AIC =", round(AIC3Medians_no3sd_smallval, 2), ", R² =", round(r2_model3_median_no3sd_smallval, 3)), x = "Log (Small Const) Median Average Rating", y = "Log (Small Const) Median Reasonable Rating") + theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Model 3 (Ideal effect)
+  new_data2_median_no3sd_smallval <- expand.grid( Average = median(dataforAICMedians_no3sd_smallval_clean$Average, na.rm=TRUE), Ideal = seq(min(dataforAICMedians_no3sd_smallval_clean$Ideal, na.rm=TRUE), max(dataforAICMedians_no3sd_smallval_clean$Ideal, na.rm=TRUE), length.out = 100) )
+  new_data2_median_no3sd_smallval <- new_data2_median_no3sd_smallval[is.finite(new_data2_median_no3sd_smallval$Average) & is.finite(new_data2_median_no3sd_smallval$Ideal),]
+  if(nrow(new_data2_median_no3sd_smallval)>0){ new_data2_median_no3sd_smallval$predicted_reasonable <- predict(Model3Medians_no3sd_smallval, newdata = new_data2_median_no3sd_smallval) } else { new_data2_median_no3sd_smallval <- data.frame(Average=numeric(), Ideal=numeric(), predicted_reasonable=numeric())}
+  plot4_median_no3sd_smallval <- ggplot(dataforAICMedians_no3sd_smallval_clean, aes(x = Ideal, y = Reasonable)) + geom_point(size = 3, alpha = 0.5) + geom_line(data = new_data2_median_no3sd_smallval, aes(y = predicted_reasonable), color = "red", size = 1) + labs(title = "Model 3 (NO 3SD, Log Small Const): Effect of Median Ideal", subtitle = paste("AIC =", round(AIC3Medians_no3sd_smallval, 2), ", R² =", round(r2_model3_median_no3sd_smallval, 3)), x = "Log (Small Const) Median Ideal Rating", y = "Log (Small Const) Median Reasonable Rating") + theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Display plots
+  print(plot1_median_no3sd_smallval)
+  print(plot2_median_no3sd_smallval)
+  print(plot3_median_no3sd_smallval)
+  print(plot4_median_no3sd_smallval)
+
+  # Save plots
+  ggsave("model1_median_avg_reas_no3sd_smallval.png", plot1_median_no3sd_smallval, width = 8, height = 6, dpi = 300)
+  ggsave("model2_median_ideal_reas_no3sd_smallval.png", plot2_median_no3sd_smallval, width = 8, height = 6, dpi = 300)
+  ggsave("model3_median_avg_eff_no3sd_smallval.png", plot3_median_no3sd_smallval, width = 8, height = 6, dpi = 300)
+  ggsave("model3_median_ideal_eff_no3sd_smallval.png", plot4_median_no3sd_smallval, width = 8, height = 6, dpi = 300)
+  grid_plots_median_no3sd_smallval <- grid.arrange(plot1_median_no3sd_smallval, plot2_median_no3sd_smallval, plot3_median_no3sd_smallval, plot4_median_no3sd_smallval, ncol = 2)
+  ggsave("all_median_plots_no3sd_smallval.png", grid_plots_median_no3sd_smallval, width = 14, height = 10, dpi = 300)
+
+  # Correlation matrix
+  cor_data_no3sd_smallval <- dataforAICMedians_no3sd_smallval_clean[complete.cases(dataforAICMedians_no3sd_smallval_clean),]
+  if(nrow(cor_data_no3sd_smallval) > 1) {
+   cor_matrix_no3sd_smallval <- cor(cor_data_no3sd_smallval, use = "complete.obs")
+   corrplot(cor_matrix_no3sd_smallval, method = "color", type = "upper", addCoef.col = "black", tl.col = "black", tl.srt = 45, diag = FALSE, title = "Correlation Matrix (NO 3SD, Log Small Constant)", mar = c(0,0,1,0))
+  } else { cat("Not enough data for correlation matrix (NO 3SD, Log Small Constant).\n") }
+
+  # Coefficient tables
+  model1_coefs_no3sd_smallval <- get_model_coefs(Model1Medians_no3sd_smallval)
+  model2_coefs_no3sd_smallval <- get_model_coefs(Model2Medians_no3sd_smallval)
+  model3_coefs_no3sd_smallval <- get_model_coefs(Model3Medians_no3sd_smallval)
+  model1_coefs_no3sd_smallval$p_value <- sapply(model1_coefs_no3sd_smallval$p_value, format_pvalue)
+  model2_coefs_no3sd_smallval$p_value <- sapply(model2_coefs_no3sd_smallval$p_value, format_pvalue)
+  model3_coefs_no3sd_smallval$p_value <- sapply(model3_coefs_no3sd_smallval$p_value, format_pvalue)
+  kable(model1_coefs_no3sd_smallval, caption = "Model 1 Coeffs (NO 3SD, Log Small Const)") %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+  kable(model2_coefs_no3sd_smallval, caption = "Model 2 Coeffs (NO 3SD, Log Small Const)") %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+  kable(model3_coefs_no3sd_smallval, caption = "Model 3 Coeffs (NO 3SD, Log Small Const)") %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+  # Print model summaries
+  cat("\nModel Summaries (NO 3SD, Log Small Constant):\n")
+  print(summary(Model1Medians_no3sd_smallval))
+  print(summary(Model2Medians_no3sd_smallval))
+  print(summary(Model3Medians_no3sd_smallval))
+
+} else {
+   cat("Skipping plots and summaries for (NO 3SD, Log Small Constant) due to insufficient data.\n")
+}
+
+# Store results
+analysis_3_results_no3sd_smallval <- list(
+  medians_by_question = if(exists("medians_df_no3sd")) medians_df_no3sd else NULL,
+  log_medians_by_question = if(exists("log_medians_df_no3sd_smallval")) log_medians_df_no3sd_smallval else NULL,
+  regression_models = if(exists("Model1Medians_no3sd_smallval")) list(model1 = Model1Medians_no3sd_smallval, model2 = Model2Medians_no3sd_smallval, model3 = Model3Medians_no3sd_smallval) else NULL,
+  regression_summary = if(exists("regression_summary_medians_no3sd_smallval")) regression_summary_medians_no3sd_smallval else NULL,
+  aic_values = if(exists("AIC1Medians_no3sd_smallval")) c(AIC1 = AIC1Medians_no3sd_smallval, AIC2 = AIC2Medians_no3sd_smallval, AIC3 = AIC3Medians_no3sd_smallval) else NULL
+)
+```
+#### 4b. (Plus one to all values): Plots and Reporting (NO 3SD Removal)
+
+```{r}
+# Check if models exist before plotting
+if(exists("Model1Medians_no3sd_plusone") && exists("dataforAICMedians_no3sd_plusone_clean") && nrow(dataforAICMedians_no3sd_plusone_clean) > 0) {
+
+  # Average Median vs Reasonable Median
+  plot1_median_no3sd_plusone <- ggplot(dataforAICMedians_no3sd_plusone_clean, aes(x = Average, y = Reasonable)) +
+    geom_point(size = 3, alpha = 0.7) + geom_smooth(method = "lm", se = TRUE, color = "blue") +
+    labs(title = "Model 1 (NO 3SD, Log+1): Median Average vs Reasonable",
+         subtitle = paste("AIC =", round(AIC1Medians_no3sd_plusone, 2), ", R² =", round(r2_model1_median_no3sd_plusone, 3)),
+         x = "Log (+1) Median Average Rating", y = "Log (+1) Median Reasonable Rating") +
+    theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Ideal Median vs Reasonable Median
+  plot2_median_no3sd_plusone <- ggplot(dataforAICMedians_no3sd_plusone_clean, aes(x = Ideal, y = Reasonable)) +
+    geom_point(size = 3, alpha = 0.7) + geom_smooth(method = "lm", se = TRUE, color = "red") +
+    labs(title = "Model 2 (NO 3SD, Log+1): Median Ideal vs Reasonable",
+         subtitle = paste("AIC =", round(AIC2Medians_no3sd_plusone, 2), ", R² =", round(r2_model2_median_no3sd_plusone, 3)),
+         x = "Log (+1) Median Ideal Rating", y = "Log (+1) Median Reasonable Rating") +
+    theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Model 3 (Average effect)
+  new_data_median_no3sd_plusone <- expand.grid( Average = seq(min(dataforAICMedians_no3sd_plusone_clean$Average, na.rm=TRUE), max(dataforAICMedians_no3sd_plusone_clean$Average, na.rm=TRUE), length.out = 100), Ideal = median(dataforAICMedians_no3sd_plusone_clean$Ideal, na.rm=TRUE) )
+  new_data_median_no3sd_plusone <- new_data_median_no3sd_plusone[is.finite(new_data_median_no3sd_plusone$Average) & is.finite(new_data_median_no3sd_plusone$Ideal),]
+  if(nrow(new_data_median_no3sd_plusone)>0){ new_data_median_no3sd_plusone$predicted_reasonable <- predict(Model3Medians_no3sd_plusone, newdata = new_data_median_no3sd_plusone) } else { new_data_median_no3sd_plusone <- data.frame(Average=numeric(), Ideal=numeric(), predicted_reasonable=numeric())}
+  plot3_median_no3sd_plusone <- ggplot(dataforAICMedians_no3sd_plusone_clean, aes(x = Average, y = Reasonable)) + geom_point(size = 3, alpha = 0.5) + geom_line(data = new_data_median_no3sd_plusone, aes(y = predicted_reasonable), color = "blue", size = 1) + labs(title = "Model 3 (NO 3SD, Log+1): Effect of Median Average", subtitle = paste("AIC =", round(AIC3Medians_no3sd_plusone, 2), ", R² =", round(r2_model3_median_no3sd_plusone, 3)), x = "Log (+1) Median Average Rating", y = "Log (+1) Median Reasonable Rating") + theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Model 3 (Ideal effect)
+  new_data2_median_no3sd_plusone <- expand.grid( Average = median(dataforAICMedians_no3sd_plusone_clean$Average, na.rm=TRUE), Ideal = seq(min(dataforAICMedians_no3sd_plusone_clean$Ideal, na.rm=TRUE), max(dataforAICMedians_no3sd_plusone_clean$Ideal, na.rm=TRUE), length.out = 100) )
+  new_data2_median_no3sd_plusone <- new_data2_median_no3sd_plusone[is.finite(new_data2_median_no3sd_plusone$Average) & is.finite(new_data2_median_no3sd_plusone$Ideal),]
+  if(nrow(new_data2_median_no3sd_plusone)>0){ new_data2_median_no3sd_plusone$predicted_reasonable <- predict(Model3Medians_no3sd_plusone, newdata = new_data2_median_no3sd_plusone) } else { new_data2_median_no3sd_plusone <- data.frame(Average=numeric(), Ideal=numeric(), predicted_reasonable=numeric())}
+  plot4_median_no3sd_plusone <- ggplot(dataforAICMedians_no3sd_plusone_clean, aes(x = Ideal, y = Reasonable)) + geom_point(size = 3, alpha = 0.5) + geom_line(data = new_data2_median_no3sd_plusone, aes(y = predicted_reasonable), color = "red", size = 1) + labs(title = "Model 3 (NO 3SD, Log+1): Effect of Median Ideal", subtitle = paste("AIC =", round(AIC3Medians_no3sd_plusone, 2), ", R² =", round(r2_model3_median_no3sd_plusone, 3)), x = "Log (+1) Median Ideal Rating", y = "Log (+1) Median Reasonable Rating") + theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Display plots
+  print(plot1_median_no3sd_plusone)
+  print(plot2_median_no3sd_plusone)
+  print(plot3_median_no3sd_plusone)
+  print(plot4_median_no3sd_plusone)
+
+  # Save plots
+  ggsave("model1_median_avg_reas_no3sd_plusone.png", plot1_median_no3sd_plusone, width = 8, height = 6, dpi = 300)
+  ggsave("model2_median_ideal_reas_no3sd_plusone.png", plot2_median_no3sd_plusone, width = 8, height = 6, dpi = 300)
+  ggsave("model3_median_avg_eff_no3sd_plusone.png", plot3_median_no3sd_plusone, width = 8, height = 6, dpi = 300)
+  ggsave("model3_median_ideal_eff_no3sd_plusone.png", plot4_median_no3sd_plusone, width = 8, height = 6, dpi = 300)
+  grid_plots_median_no3sd_plusone <- grid.arrange(plot1_median_no3sd_plusone, plot2_median_no3sd_plusone, plot3_median_no3sd_plusone, plot4_median_no3sd_plusone, ncol = 2)
+  ggsave("all_median_plots_no3sd_plusone.png", grid_plots_median_no3sd_plusone, width = 14, height = 10, dpi = 300)
+
+  # Correlation matrix
+  cor_data_no3sd_plusone <- dataforAICMedians_no3sd_plusone_clean[complete.cases(dataforAICMedians_no3sd_plusone_clean),]
+  if(nrow(cor_data_no3sd_plusone) > 1) {
+   cor_matrix_no3sd_plusone <- cor(cor_data_no3sd_plusone, use = "complete.obs")
+   corrplot(cor_matrix_no3sd_plusone, method = "color", type = "upper", addCoef.col = "black", tl.col = "black", tl.srt = 45, diag = FALSE, title = "Correlation Matrix (NO 3SD, Log Plus One)", mar = c(0,0,1,0))
+  } else { cat("Not enough data for correlation matrix (NO 3SD, Log Plus One).\n") }
+
+  # Coefficient tables
+  model1_coefs_no3sd_plusone <- get_model_coefs(Model1Medians_no3sd_plusone)
+  model2_coefs_no3sd_plusone <- get_model_coefs(Model2Medians_no3sd_plusone)
+  model3_coefs_no3sd_plusone <- get_model_coefs(Model3Medians_no3sd_plusone)
+  model1_coefs_no3sd_plusone$p_value <- sapply(model1_coefs_no3sd_plusone$p_value, format_pvalue)
+  model2_coefs_no3sd_plusone$p_value <- sapply(model2_coefs_no3sd_plusone$p_value, format_pvalue)
+  model3_coefs_no3sd_plusone$p_value <- sapply(model3_coefs_no3sd_plusone$p_value, format_pvalue)
+  kable(model1_coefs_no3sd_plusone, caption = "Model 1 Coeffs (NO 3SD, Log Plus One)") %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+  kable(model2_coefs_no3sd_plusone, caption = "Model 2 Coeffs (NO 3SD, Log Plus One)") %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+  kable(model3_coefs_no3sd_plusone, caption = "Model 3 Coeffs (NO 3SD, Log Plus One)") %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+  # Print model summaries
+  cat("\nModel Summaries (NO 3SD, Log Plus One):\n")
+  print(summary(Model1Medians_no3sd_plusone))
+  print(summary(Model2Medians_no3sd_plusone))
+  print(summary(Model3Medians_no3sd_plusone))
+
+} else {
+  cat("Skipping plots and summaries for (NO 3SD, Log Plus One) due to insufficient data.\n")
+}
+
+# Store results
+analysis_3_results_no3sd_plusone <- list(
+  medians_by_question = if(exists("medians_df_no3sd")) medians_df_no3sd else NULL,
+  log_medians_by_question = if(exists("log_medians_df_no3sd_plusone")) log_medians_df_no3sd_plusone else NULL,
+  regression_models = if(exists("Model1Medians_no3sd_plusone")) list(model1 = Model1Medians_no3sd_plusone, model2 = Model2Medians_no3sd_plusone, model3 = Model3Medians_no3sd_plusone) else NULL,
+  regression_summary = if(exists("regression_summary_medians_no3sd_plusone")) regression_summary_medians_no3sd_plusone else NULL,
+  aic_values = if(exists("AIC1Medians_no3sd_plusone")) c(AIC1 = AIC1Medians_no3sd_plusone, AIC2 = AIC2Medians_no3sd_plusone, AIC3 = AIC3Medians_no3sd_plusone) else NULL
+)
+```
+
+# Analysis 3 [WITH 3 SD removed]: Overall results, with median ratings
+
+#### 1. Compute the median rating 
+
+```{r}
+# Calculate medians from data filtered for attention check AND 3SD outliers
+column_medians_average_3sd <- sapply(Data_All_Average_Filtered[, question_cols], median, na.rm = TRUE)
+column_medians_ideal_3sd <- sapply(Data_All_Ideal_Filtered[, question_cols], median, na.rm = TRUE)
+column_medians_reasonable_3sd <- sapply(Data_All_Reasonable_Filtered[, question_cols], median, na.rm = TRUE)
+
+# Create a dataframe for the medians (WITH 3SD)
+medians_df_3sd <- data.frame(
+  Question = names(column_medians_average_3sd),
+  Average = column_medians_average_3sd,
+  Ideal = column_medians_ideal_3sd,
+  Reasonable = column_medians_reasonable_3sd
+)
+
+# Display the medians for each question
+kable(medians_df_3sd, caption = "Median Values (WITH 3SD Removal)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+```
+
+#### 2a. (Small constant inf values): Convert median responses to a natural log scale (WITH 3SD Removal)
+
+```{r}
+# Define Log function: Small constant for zero
+log_smallvalue <- function(x) {
+  x_safe <- x
+  # Replace only actual zeros, leave NAs as NA
+  x_safe[which(x == 0 & !is.na(x))] <- 0.01
+  log(x_safe)
+}
+
+# Apply the log function: log_smallvalue (defined earlier)
+log_medians_average_3sd_smallval <- log_smallvalue(column_medians_average_3sd)
+log_medians_ideal_3sd_smallval <- log_smallvalue(column_medians_ideal_3sd)
+log_medians_reasonable_3sd_smallval <- log_smallvalue(column_medians_reasonable_3sd)
+
+# Create a dataframe for the log medians (WITH 3SD, Small Constant)
+log_medians_df_3sd_smallval <- data.frame(
+  Question = names(log_medians_average_3sd_smallval),
+  Average = log_medians_average_3sd_smallval,
+  Ideal = log_medians_ideal_3sd_smallval,
+  Reasonable = log_medians_reasonable_3sd_smallval
+)
+
+# Display the log medians
+kable(log_medians_df_3sd_smallval, caption = "Log-Transformed (Small Constant) Median Values (WITH 3SD Removal)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+```
+
+#### 2b. (Plus one to all values): Convert median responses to a natural log scale (WITH 3SD Removal)
+
+```{r}
+# Define Log function: Add 1
+log_plus_one <- function(x) {
+  log(x + 1)
+}
+
+# Apply the log function: log_plus_one (defined earlier)
+log_medians_average_3sd_plusone <- log_plus_one(column_medians_average_3sd)
+log_medians_ideal_3sd_plusone <- log_plus_one(column_medians_ideal_3sd)
+log_medians_reasonable_3sd_plusone <- log_plus_one(column_medians_reasonable_3sd)
+
+# Create a dataframe for the log medians (WITH 3SD, Plus One)
+log_medians_df_3sd_plusone <- data.frame(
+  Question = names(log_medians_average_3sd_plusone),
+  Average = log_medians_average_3sd_plusone,
+  Ideal = log_medians_ideal_3sd_plusone,
+  Reasonable = log_medians_reasonable_3sd_plusone
+)
+
+# Display the log medians
+kable(log_medians_df_3sd_plusone, caption = "Log-Transformed (Plus One) Median Values (WITH 3SD Removal)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+```
+
+#### 3a. (Small constant inf values): Conduct three regressions and record AIC (WITH 3SD Removal)
+
+```{r}
+# Create data frame for regression (WITH 3SD, Small Constant)
+dataforAICMedians_3sd_smallval <- data.frame(
+  Reasonable = log_medians_reasonable_3sd_smallval,
+  Average = log_medians_average_3sd_smallval,
+  Ideal = log_medians_ideal_3sd_smallval
+)
+
+# Filter out rows with non-finite values before regression
+dataforAICMedians_3sd_smallval_clean <- dataforAICMedians_3sd_smallval %>%
+  filter(is.finite(Reasonable) & is.finite(Average) & is.finite(Ideal))
+
+# Check if enough data points remain
+if(nrow(dataforAICMedians_3sd_smallval_clean) > 3) {
+
+  # Model I
+  Model1Medians_3sd_smallval <- lm(Reasonable ~ Average, data = dataforAICMedians_3sd_smallval_clean)
+  AIC1Medians_3sd_smallval <- AIC(Model1Medians_3sd_smallval)
+  r2_model1_median_3sd_smallval <- summary(Model1Medians_3sd_smallval)$r.squared
+
+  # Model II
+  Model2Medians_3sd_smallval <- lm(Reasonable ~ Ideal, data = dataforAICMedians_3sd_smallval_clean)
+  AIC2Medians_3sd_smallval <- AIC(Model2Medians_3sd_smallval)
+  r2_model2_median_3sd_smallval <- summary(Model2Medians_3sd_smallval)$r.squared
+
+  # Model III
+  Model3Medians_3sd_smallval <- lm(Reasonable ~ Average + Ideal, data = dataforAICMedians_3sd_smallval_clean)
+  AIC3Medians_3sd_smallval <- AIC(Model3Medians_3sd_smallval)
+  r2_model3_median_3sd_smallval <- summary(Model3Medians_3sd_smallval)$r.squared
+
+  # Create a regression summary dataframe
+  regression_summary_medians_3sd_smallval <- data.frame(
+    Model = c("Average predicts Reasonable",
+              "Ideal predicts Reasonable",
+              "Average + Ideal predict Reasonable"),
+    AIC = c(AIC1Medians_3sd_smallval, AIC2Medians_3sd_smallval, AIC3Medians_3sd_smallval),
+    R_squared = c(r2_model1_median_3sd_smallval, r2_model2_median_3sd_smallval, r2_model3_median_3sd_smallval)
+  )
+
+  # Display the regression summary table
+  kable(regression_summary_medians_3sd_smallval, caption = "Regression Comparison (Median, WITH 3SD, Log Small Constant)") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+} else {
+   cat("Not enough valid data points for regression (WITH 3SD, Log Small Constant).\n")
+   regression_summary_medians_3sd_smallval <- data.frame(Model=character(), AIC=numeric(), R_squared=numeric())
+}
+```
+
+#### 3b. (Plus one to all values): Conduct three regressions and record AIC (WITH 3SD Removal)
+
+```{r}
+# Create data frame for regression (WITH 3SD, Plus One)
+dataforAICMedians_3sd_plusone <- data.frame(
+  Reasonable = log_medians_reasonable_3sd_plusone,
+  Average = log_medians_average_3sd_plusone,
+  Ideal = log_medians_ideal_3sd_plusone
+)
+
+# Filter out rows with non-finite values before regression
+dataforAICMedians_3sd_plusone_clean <- dataforAICMedians_3sd_plusone %>%
+  filter(is.finite(Reasonable) & is.finite(Average) & is.finite(Ideal))
+
+# Check if enough data points remain
+if(nrow(dataforAICMedians_3sd_plusone_clean) > 3) {
+
+  # Model I
+  Model1Medians_3sd_plusone <- lm(Reasonable ~ Average, data = dataforAICMedians_3sd_plusone_clean)
+  AIC1Medians_3sd_plusone <- AIC(Model1Medians_3sd_plusone)
+  r2_model1_median_3sd_plusone <- summary(Model1Medians_3sd_plusone)$r.squared
+
+  # Model II
+  Model2Medians_3sd_plusone <- lm(Reasonable ~ Ideal, data = dataforAICMedians_3sd_plusone_clean)
+  AIC2Medians_3sd_plusone <- AIC(Model2Medians_3sd_plusone)
+  r2_model2_median_3sd_plusone <- summary(Model2Medians_3sd_plusone)$r.squared
+
+  # Model III
+  Model3Medians_3sd_plusone <- lm(Reasonable ~ Average + Ideal, data = dataforAICMedians_3sd_plusone_clean)
+  AIC3Medians_3sd_plusone <- AIC(Model3Medians_3sd_plusone)
+  r2_model3_median_3sd_plusone <- summary(Model3Medians_3sd_plusone)$r.squared
+
+  # Create a regression summary dataframe
+  regression_summary_medians_3sd_plusone <- data.frame(
+    Model = c("Average predicts Reasonable",
+              "Ideal predicts Reasonable",
+              "Average + Ideal predict Reasonable"),
+    AIC = c(AIC1Medians_3sd_plusone, AIC2Medians_3sd_plusone, AIC3Medians_3sd_plusone),
+    R_squared = c(r2_model1_median_3sd_plusone, r2_model2_median_3sd_plusone, r2_model3_median_3sd_plusone)
+  )
+
+  # Display the regression summary table
+  kable(regression_summary_medians_3sd_plusone, caption = "Regression Comparison (Median, WITH 3SD, Log Plus One)") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+} else {
+  cat("Not enough valid data points for regression (WITH 3SD, Log Plus One).\n")
+  regression_summary_medians_3sd_plusone <- data.frame(Model=character(), AIC=numeric(), R_squared=numeric())
+}
+```
+
+#### 4a. (Small constant inf values): Plots and Reporting (WITH 3SD Removal)
+
+```{r}
+# Check if models exist before plotting
+if(exists("Model1Medians_3sd_smallval") && exists("dataforAICMedians_3sd_smallval_clean") && nrow(dataforAICMedians_3sd_smallval_clean) > 0) {
+
+  # Average Median vs Reasonable Median
+  plot1_median_3sd_smallval <- ggplot(dataforAICMedians_3sd_smallval_clean, aes(x = Average, y = Reasonable)) +
+    geom_point(size = 3, alpha = 0.7) + geom_smooth(method = "lm", se = TRUE, color = "blue") +
+    labs(title = "Model 1 (WITH 3SD, Log Small Const): Median Average vs Reasonable",
+         subtitle = paste("AIC =", round(AIC1Medians_3sd_smallval, 2), ", R² =", round(r2_model1_median_3sd_smallval, 3)),
+         x = "Log (Small Const) Median Average Rating (3SD Removed)",
+         y = "Log (Small Const) Median Reasonable Rating (3SD Removed)") +
+    theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Ideal Median vs Reasonable Median
+  plot2_median_3sd_smallval <- ggplot(dataforAICMedians_3sd_smallval_clean, aes(x = Ideal, y = Reasonable)) +
+    geom_point(size = 3, alpha = 0.7) + geom_smooth(method = "lm", se = TRUE, color = "red") +
+    labs(title = "Model 2 (WITH 3SD, Log Small Const): Median Ideal vs Reasonable",
+         subtitle = paste("AIC =", round(AIC2Medians_3sd_smallval, 2), ", R² =", round(r2_model2_median_3sd_smallval, 3)),
+         x = "Log (Small Const) Median Ideal Rating (3SD Removed)",
+         y = "Log (Small Const) Median Reasonable Rating (3SD Removed)") +
+    theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Model 3 (Average effect)
+  new_data_median_3sd_smallval <- expand.grid( Average = seq(min(dataforAICMedians_3sd_smallval_clean$Average, na.rm=TRUE), max(dataforAICMedians_3sd_smallval_clean$Average, na.rm=TRUE), length.out = 100), Ideal = median(dataforAICMedians_3sd_smallval_clean$Ideal, na.rm=TRUE) )
+  new_data_median_3sd_smallval <- new_data_median_3sd_smallval[is.finite(new_data_median_3sd_smallval$Average) & is.finite(new_data_median_3sd_smallval$Ideal),]
+  if(nrow(new_data_median_3sd_smallval)>0){ new_data_median_3sd_smallval$predicted_reasonable <- predict(Model3Medians_3sd_smallval, newdata = new_data_median_3sd_smallval) } else { new_data_median_3sd_smallval <- data.frame(Average=numeric(), Ideal=numeric(), predicted_reasonable=numeric()) }
+  plot3_median_3sd_smallval <- ggplot(dataforAICMedians_3sd_smallval_clean, aes(x = Average, y = Reasonable)) + geom_point(size = 3, alpha = 0.5) + geom_line(data = new_data_median_3sd_smallval, aes(y = predicted_reasonable), color = "blue", size = 1) + labs(title = "Model 3 (WITH 3SD, Log Small Const): Effect of Median Average", subtitle = paste("AIC =", round(AIC3Medians_3sd_smallval, 2), ", R² =", round(r2_model3_median_3sd_smallval, 3)), x = "Log (Small Const) Median Average Rating (3SD Removed)", y = "Log (Small Const) Median Reasonable Rating (3SD Removed)") + theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Model 3 (Ideal effect)
+  new_data2_median_3sd_smallval <- expand.grid( Average = median(dataforAICMedians_3sd_smallval_clean$Average, na.rm=TRUE), Ideal = seq(min(dataforAICMedians_3sd_smallval_clean$Ideal, na.rm=TRUE), max(dataforAICMedians_3sd_smallval_clean$Ideal, na.rm=TRUE), length.out = 100) )
+  new_data2_median_3sd_smallval <- new_data2_median_3sd_smallval[is.finite(new_data2_median_3sd_smallval$Average) & is.finite(new_data2_median_3sd_smallval$Ideal),]
+  if(nrow(new_data2_median_3sd_smallval)>0){ new_data2_median_3sd_smallval$predicted_reasonable <- predict(Model3Medians_3sd_smallval, newdata = new_data2_median_3sd_smallval) } else { new_data2_median_3sd_smallval <- data.frame(Average=numeric(), Ideal=numeric(), predicted_reasonable=numeric()) }
+  plot4_median_3sd_smallval <- ggplot(dataforAICMedians_3sd_smallval_clean, aes(x = Ideal, y = Reasonable)) + geom_point(size = 3, alpha = 0.5) + geom_line(data = new_data2_median_3sd_smallval, aes(y = predicted_reasonable), color = "red", size = 1) + labs(title = "Model 3 (WITH 3SD, Log Small Const): Effect of Median Ideal", subtitle = paste("AIC =", round(AIC3Medians_3sd_smallval, 2), ", R² =", round(r2_model3_median_3sd_smallval, 3)), x = "Log (Small Const) Median Ideal Rating (3SD Removed)", y = "Log (Small Const) Median Reasonable Rating (3SD Removed)") + theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Display plots
+  print(plot1_median_3sd_smallval)
+  print(plot2_median_3sd_smallval)
+  print(plot3_median_3sd_smallval)
+  print(plot4_median_3sd_smallval)
+
+  # Save plots
+  ggsave("model1_median_avg_reas_3sd_smallval.png", plot1_median_3sd_smallval, width = 8, height = 6, dpi = 300)
+  ggsave("model2_median_ideal_reas_3sd_smallval.png", plot2_median_3sd_smallval, width = 8, height = 6, dpi = 300)
+  ggsave("model3_median_avg_eff_3sd_smallval.png", plot3_median_3sd_smallval, width = 8, height = 6, dpi = 300)
+  ggsave("model3_median_ideal_eff_3sd_smallval.png", plot4_median_3sd_smallval, width = 8, height = 6, dpi = 300)
+  grid_plots_median_3sd_smallval <- grid.arrange(plot1_median_3sd_smallval, plot2_median_3sd_smallval, plot3_median_3sd_smallval, plot4_median_3sd_smallval, ncol = 2)
+  ggsave("all_median_plots_3sd_smallval.png", grid_plots_median_3sd_smallval, width = 14, height = 10, dpi = 300)
+
+  # Correlation matrix
+  cor_data_3sd_smallval <- dataforAICMedians_3sd_smallval_clean[complete.cases(dataforAICMedians_3sd_smallval_clean),]
+  if(nrow(cor_data_3sd_smallval) > 1) {
+   cor_matrix_3sd_smallval <- cor(cor_data_3sd_smallval, use = "complete.obs")
+   corrplot(cor_matrix_3sd_smallval, method = "color", type = "upper", addCoef.col = "black", tl.col = "black", tl.srt = 45, diag = FALSE, title = "Correlation Matrix (WITH 3SD, Log Small Constant)", mar = c(0,0,1,0))
+  } else { cat("Not enough data for correlation matrix (WITH 3SD, Log Small Constant).\n") }
+
+  # Coefficient tables
+  model1_coefs_3sd_smallval <- get_model_coefs(Model1Medians_3sd_smallval)
+  model2_coefs_3sd_smallval <- get_model_coefs(Model2Medians_3sd_smallval)
+  model3_coefs_3sd_smallval <- get_model_coefs(Model3Medians_3sd_smallval)
+  model1_coefs_3sd_smallval$p_value <- sapply(model1_coefs_3sd_smallval$p_value, format_pvalue)
+  model2_coefs_3sd_smallval$p_value <- sapply(model2_coefs_3sd_smallval$p_value, format_pvalue)
+  model3_coefs_3sd_smallval$p_value <- sapply(model3_coefs_3sd_smallval$p_value, format_pvalue)
+  kable(model1_coefs_3sd_smallval, caption = "Model 1 Coeffs (WITH 3SD, Log Small Const)") %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+  kable(model2_coefs_3sd_smallval, caption = "Model 2 Coeffs (WITH 3SD, Log Small Const)") %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+  kable(model3_coefs_3sd_smallval, caption = "Model 3 Coeffs (WITH 3SD, Log Small Const)") %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+  # Print model summaries
+  cat("\nModel Summaries (WITH 3SD, Log Small Constant):\n")
+  print(summary(Model1Medians_3sd_smallval))
+  print(summary(Model2Medians_3sd_smallval))
+  print(summary(Model3Medians_3sd_smallval))
+
+} else {
+   cat("Skipping plots and summaries for (WITH 3SD, Log Small Constant) due to insufficient data.\n")
+}
+
+# Store results
+analysis_3_results_3sd_smallval <- list(
+  medians_by_question = if(exists("medians_df_3sd")) medians_df_3sd else NULL,
+  log_medians_by_question = if(exists("log_medians_df_3sd_smallval")) log_medians_df_3sd_smallval else NULL,
+  regression_models = if(exists("Model1Medians_3sd_smallval")) list(model1 = Model1Medians_3sd_smallval, model2 = Model2Medians_3sd_smallval, model3 = Model3Medians_3sd_smallval) else NULL,
+  regression_summary = if(exists("regression_summary_medians_3sd_smallval")) regression_summary_medians_3sd_smallval else NULL,
+  aic_values = if(exists("AIC1Medians_3sd_smallval")) c(AIC1 = AIC1Medians_3sd_smallval, AIC2 = AIC2Medians_3sd_smallval, AIC3 = AIC3Medians_3sd_smallval) else NULL
+)
+```
+
+#### 4b. (Plus one to all values): Plots and Reporting (WITH 3SD Removal)
+
+```{r}
+# Check if models exist before plotting
+if(exists("Model1Medians_3sd_plusone") && exists("dataforAICMedians_3sd_plusone_clean") && nrow(dataforAICMedians_3sd_plusone_clean) > 0) {
+
+  # Average Median vs Reasonable Median
+  plot1_median_3sd_plusone <- ggplot(dataforAICMedians_3sd_plusone_clean, aes(x = Average, y = Reasonable)) +
+    geom_point(size = 3, alpha = 0.7) + geom_smooth(method = "lm", se = TRUE, color = "blue") +
+    labs(title = "Model 1 (WITH 3SD, Log+1): Median Average vs Reasonable",
+         subtitle = paste("AIC =", round(AIC1Medians_3sd_plusone, 2), ", R² =", round(r2_model1_median_3sd_plusone, 3)),
+         x = "Log (+1) Median Average Rating (3SD Removed)",
+         y = "Log (+1) Median Reasonable Rating (3SD Removed)") +
+    theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Ideal Median vs Reasonable Median
+  plot2_median_3sd_plusone <- ggplot(dataforAICMedians_3sd_plusone_clean, aes(x = Ideal, y = Reasonable)) +
+    geom_point(size = 3, alpha = 0.7) + geom_smooth(method = "lm", se = TRUE, color = "red") +
+    labs(title = "Model 2 (WITH 3SD, Log+1): Median Ideal vs Reasonable",
+         subtitle = paste("AIC =", round(AIC2Medians_3sd_plusone, 2), ", R² =", round(r2_model2_median_3sd_plusone, 3)),
+         x = "Log (+1) Median Ideal Rating (3SD Removed)",
+         y = "Log (+1) Median Reasonable Rating (3SD Removed)") +
+    theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Model 3 (Average effect)
+  new_data_median_3sd_plusone <- expand.grid( Average = seq(min(dataforAICMedians_3sd_plusone_clean$Average, na.rm=TRUE), max(dataforAICMedians_3sd_plusone_clean$Average, na.rm=TRUE), length.out = 100), Ideal = median(dataforAICMedians_3sd_plusone_clean$Ideal, na.rm=TRUE) )
+  new_data_median_3sd_plusone <- new_data_median_3sd_plusone[is.finite(new_data_median_3sd_plusone$Average) & is.finite(new_data_median_3sd_plusone$Ideal),]
+  if(nrow(new_data_median_3sd_plusone)>0){ new_data_median_3sd_plusone$predicted_reasonable <- predict(Model3Medians_3sd_plusone, newdata = new_data_median_3sd_plusone) } else { new_data_median_3sd_plusone <- data.frame(Average=numeric(), Ideal=numeric(), predicted_reasonable=numeric()) }
+  plot3_median_3sd_plusone <- ggplot(dataforAICMedians_3sd_plusone_clean, aes(x = Average, y = Reasonable)) + geom_point(size = 3, alpha = 0.5) + geom_line(data = new_data_median_3sd_plusone, aes(y = predicted_reasonable), color = "blue", size = 1) + labs(title = "Model 3 (WITH 3SD, Log+1): Effect of Median Average", subtitle = paste("AIC =", round(AIC3Medians_3sd_plusone, 2), ", R² =", round(r2_model3_median_3sd_plusone, 3)), x = "Log (+1) Median Average Rating (3SD Removed)", y = "Log (+1) Median Reasonable Rating (3SD Removed)") + theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Model 3 (Ideal effect)
+  new_data2_median_3sd_plusone <- expand.grid( Average = median(dataforAICMedians_3sd_plusone_clean$Average, na.rm=TRUE), Ideal = seq(min(dataforAICMedians_3sd_plusone_clean$Ideal, na.rm=TRUE), max(dataforAICMedians_3sd_plusone_clean$Ideal, na.rm=TRUE), length.out = 100) )
+  new_data2_median_3sd_plusone <- new_data2_median_3sd_plusone[is.finite(new_data2_median_3sd_plusone$Average) & is.finite(new_data2_median_3sd_plusone$Ideal),]
+  if(nrow(new_data2_median_3sd_plusone)>0){ new_data2_median_3sd_plusone$predicted_reasonable <- predict(Model3Medians_3sd_plusone, newdata = new_data2_median_3sd_plusone) } else { new_data2_median_3sd_plusone <- data.frame(Average=numeric(), Ideal=numeric(), predicted_reasonable=numeric()) }
+  plot4_median_3sd_plusone <- ggplot(dataforAICMedians_3sd_plusone_clean, aes(x = Ideal, y = Reasonable)) + geom_point(size = 3, alpha = 0.5) + geom_line(data = new_data2_median_3sd_plusone, aes(y = predicted_reasonable), color = "red", size = 1) + labs(title = "Model 3 (WITH 3SD, Log+1): Effect of Median Ideal", subtitle = paste("AIC =", round(AIC3Medians_3sd_plusone, 2), ", R² =", round(r2_model3_median_3sd_plusone, 3)), x = "Log (+1) Median Ideal Rating (3SD Removed)", y = "Log (+1) Median Reasonable Rating (3SD Removed)") + theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9) )
+
+  # Display plots
+  print(plot1_median_3sd_plusone)
+  print(plot2_median_3sd_plusone)
+  print(plot3_median_3sd_plusone)
+  print(plot4_median_3sd_plusone)
+
+  # Save plots
+  ggsave("model1_median_avg_reas_3sd_plusone.png", plot1_median_3sd_plusone, width = 8, height = 6, dpi = 300)
+  ggsave("model2_median_ideal_reas_3sd_plusone.png", plot2_median_3sd_plusone, width = 8, height = 6, dpi = 300)
+  ggsave("model3_median_avg_eff_3sd_plusone.png", plot3_median_3sd_plusone, width = 8, height = 6, dpi = 300)
+  ggsave("model3_median_ideal_eff_3sd_plusone.png", plot4_median_3sd_plusone, width = 8, height = 6, dpi = 300)
+  grid_plots_median_3sd_plusone <- grid.arrange(plot1_median_3sd_plusone, plot2_median_3sd_plusone, plot3_median_3sd_plusone, plot4_median_3sd_plusone, ncol = 2)
+  ggsave("all_median_plots_3sd_plusone.png", grid_plots_median_3sd_plusone, width = 14, height = 10, dpi = 300)
+
+  # Correlation matrix
+  cor_data_3sd_plusone <- dataforAICMedians_3sd_plusone_clean[complete.cases(dataforAICMedians_3sd_plusone_clean),]
+  if(nrow(cor_data_3sd_plusone) > 1) {
+   cor_matrix_3sd_plusone <- cor(cor_data_3sd_plusone, use = "complete.obs")
+   corrplot(cor_matrix_3sd_plusone, method = "color", type = "upper", addCoef.col = "black", tl.col = "black", tl.srt = 45, diag = FALSE, title = "Correlation Matrix (WITH 3SD, Log Plus One)", mar = c(0,0,1,0))
+  } else { cat("Not enough data for correlation matrix (WITH 3SD, Log Plus One).\n") }
+
+  # Coefficient tables
+  model1_coefs_3sd_plusone <- get_model_coefs(Model1Medians_3sd_plusone)
+  model2_coefs_3sd_plusone <- get_model_coefs(Model2Medians_3sd_plusone)
+  model3_coefs_3sd_plusone <- get_model_coefs(Model3Medians_3sd_plusone)
+  model1_coefs_3sd_plusone$p_value <- sapply(model1_coefs_3sd_plusone$p_value, format_pvalue)
+  model2_coefs_3sd_plusone$p_value <- sapply(model2_coefs_3sd_plusone$p_value, format_pvalue)
+  model3_coefs_3sd_plusone$p_value <- sapply(model3_coefs_3sd_plusone$p_value, format_pvalue)
+  kable(model1_coefs_3sd_plusone, caption = "Model 1 Coeffs (WITH 3SD, Log Plus One)") %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+  kable(model2_coefs_3sd_plusone, caption = "Model 2 Coeffs (WITH 3SD, Log Plus One)") %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+  kable(model3_coefs_3sd_plusone, caption = "Model 3 Coeffs (WITH 3SD, Log Plus One)") %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+  # Print model summaries
+  cat("\nModel Summaries (WITH 3SD, Log Plus One):\n")
+  print(summary(Model1Medians_3sd_plusone))
+  print(summary(Model2Medians_3sd_plusone))
+  print(summary(Model3Medians_3sd_plusone))
+
+} else {
+  cat("Skipping plots and summaries for (WITH 3SD, Log Plus One) due to insufficient data.\n")
+}
+
+# Store results
+analysis_3_results_3sd_plusone <- list(
+  medians_by_question = if(exists("medians_df_3sd")) medians_df_3sd else NULL,
+  log_medians_by_question = if(exists("log_medians_df_3sd_plusone")) log_medians_df_3sd_plusone else NULL,
+  regression_models = if(exists("Model1Medians_3sd_plusone")) list(model1 = Model1Medians_3sd_plusone, model2 = Model2Medians_3sd_plusone, model3 = Model3Medians_3sd_plusone) else NULL,
+  regression_summary = if(exists("regression_summary_medians_3sd_plusone")) regression_summary_medians_3sd_plusone else NULL,
+  aic_values = if(exists("AIC1Medians_3sd_plusone")) c(AIC1 = AIC1Medians_3sd_plusone, AIC2 = AIC2Medians_3sd_plusone, AIC3 = AIC3Medians_3sd_plusone) else NULL
+)
+```
+
+# Analysis 4 [NO 3 SD Outlier Removal]: Overall results, intermediacy with median ratings
+
+Step 1 and Step 2 have been completed in the earlier analysis.
+
+#### Functions for Analysis 4
+
+```{r}
+# Function to check if reasonable is on the "ideal side" of average
+# Equal median ratings are treated as being on the predicted side
+is_ideal_side_median <- function(average, ideal, reasonable) {
+  if (any(is.na(c(average, ideal, reasonable)))) {
+    return(NA)
+  }
+  # Check if distance to ideal is less than or equal to distance to average
+  ifelse(abs(reasonable - ideal) <= abs(reasonable - average), 1, 0)
+}
+
+# Function to check if reasonable is on the "average side" of ideal
+# Equal median ratings are treated as being on the predicted side
+is_average_side_median <- function(average, ideal, reasonable) {
+  if (any(is.na(c(average, ideal, reasonable)))) {
+      return(NA)
+  }
+  # Check if distance to average is less than or equal to distance to ideal
+  ifelse(abs(reasonable - average) <= abs(reasonable - ideal), 1, 0)
+}
+
+# Function to check if reasonable falls between average and ideal (inclusive)
+# Handles cases where average == ideal
+is_both_sides_median <- function(average, ideal, reasonable) {
+  if (any(is.na(c(average, ideal, reasonable)))) {
+      return(NA)
+  }
+  # Check if reasonable is numerically between average and ideal, inclusive
+  # This works regardless of whether average > ideal or ideal > average
+  ifelse((reasonable >= min(average, ideal)) & (reasonable <= max(average, ideal)), 1, 0)
+}
+```
+
+#### Steps 3, 4, 5: Intermediacy Calculations (NO 3SD Removal)
+
+```{r}
+# --- Calculate all vectors ---
+ideal_side_vector_median_no3sd <- mapply(is_ideal_side_median, column_medians_average_no3sd, column_medians_ideal_no3sd, column_medians_reasonable_no3sd)
+average_side_vector_median_no3sd <- mapply(is_average_side_median, column_medians_average_no3sd, column_medians_ideal_no3sd, column_medians_reasonable_no3sd)
+both_sides_vector_median_no3sd <- mapply(is_both_sides_median, column_medians_average_no3sd, column_medians_ideal_no3sd, column_medians_reasonable_no3sd)
+
+# --- Calculate counts and valid Ns ---
+count_ideal_side_median_no3sd <- sum(ideal_side_vector_median_no3sd, na.rm = TRUE)
+valid_questions_ideal_no3sd <- sum(!is.na(ideal_side_vector_median_no3sd))
+count_average_side_median_no3sd <- sum(average_side_vector_median_no3sd, na.rm = TRUE)
+valid_questions_avg_no3sd <- sum(!is.na(average_side_vector_median_no3sd))
+count_both_sides_median_no3sd <- sum(both_sides_vector_median_no3sd, na.rm = TRUE)
+valid_questions_both_no3sd <- sum(!is.na(both_sides_vector_median_no3sd))
+
+# --- Perform binomial tests ---
+p_val_ideal_no3sd <- NA; binomial_result_ideal_median_no3sd <- NULL
+if (valid_questions_ideal_no3sd > 0) {
+  binomial_result_ideal_median_no3sd <- binom.test(count_ideal_side_median_no3sd, valid_questions_ideal_no3sd, p = 0.5, alternative = "greater")
+  p_val_ideal_no3sd <- binomial_result_ideal_median_no3sd$p.value
+}
+
+p_val_avg_no3sd <- NA; binomial_result_avg_side_median_no3sd <- NULL
+if (valid_questions_avg_no3sd > 0) {
+  binomial_result_avg_side_median_no3sd <- binom.test(count_average_side_median_no3sd, valid_questions_avg_no3sd, p = 0.5, alternative = "greater")
+   p_val_avg_no3sd <- binomial_result_avg_side_median_no3sd$p.value
+}
+
+p_val_both_no3sd <- NA; binomial_result_both_sides_median_no3sd <- NULL
+if (valid_questions_both_no3sd > 0) {
+  binomial_result_both_sides_median_no3sd <- binom.test(count_both_sides_median_no3sd, valid_questions_both_no3sd, p = 1/3, alternative = "two.sided")
+  p_val_both_no3sd <- binomial_result_both_sides_median_no3sd$p.value
+}
+
+# --- Create ONE combined summary table ---
+intermediacy_summary_no3sd <- data.frame(
+  Test = c("On Ideal Side of Average", "On Average Side of Ideal", "Between Average and Ideal"),
+  Count = c(count_ideal_side_median_no3sd, count_average_side_median_no3sd, count_both_sides_median_no3sd),
+  Total_Valid = c(valid_questions_ideal_no3sd, valid_questions_avg_no3sd, valid_questions_both_no3sd),
+  Proportion = c(ifelse(valid_questions_ideal_no3sd > 0, count_ideal_side_median_no3sd / valid_questions_ideal_no3sd, NA),
+                 ifelse(valid_questions_avg_no3sd > 0, count_average_side_median_no3sd / valid_questions_avg_no3sd, NA),
+                 ifelse(valid_questions_both_no3sd > 0, count_both_sides_median_no3sd / valid_questions_both_no3sd, NA)),
+  Expected_Prop = c(0.5, 0.5, 1/3),
+  p_value = c(p_val_ideal_no3sd, p_val_avg_no3sd, p_val_both_no3sd)
+)
+
+# Format proportions and p-values
+intermediacy_summary_no3sd$Proportion <- scales::percent(intermediacy_summary_no3sd$Proportion, accuracy = 0.1)
+intermediacy_summary_no3sd$Expected_Prop <- scales::percent(intermediacy_summary_no3sd$Expected_Prop, accuracy = 0.1)
+intermediacy_summary_no3sd$p_value <- sapply(intermediacy_summary_no3sd$p_value, format_pvalue)
+
+# Display the summary table
+kable(intermediacy_summary_no3sd[,c("Test", "Count", "Total_Valid", "Proportion", "Expected_Prop", "p_value")],
+      caption = "Intermediacy Binomial Tests (NO 3SD Removal)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+```
+#### 6. Plots and Reporting (Intermediacy - Median Analysis, NO 3SD Removed)
+
+```{r}
+# Create a table showing the results for each question
+question_position_summary_median_no3sd <- data.frame(
+  Question = names(column_medians_average_no3sd),
+  Average_Value = column_medians_average_no3sd,
+  Ideal_Value = column_medians_ideal_no3sd,
+  Reasonable_Value = column_medians_reasonable_no3sd,
+  On_Ideal_Side = ideal_side_vector_median_no3sd,
+  On_Average_Side = average_side_vector_median_no3sd,
+  Between_Average_And_Ideal = both_sides_vector_median_no3sd
+)
+# Handle NAs and Categorize
+question_position_summary_median_no3sd <- question_position_summary_median_no3sd %>%
+  mutate(
+    On_Ideal_Side = ifelse(is.na(On_Ideal_Side), 0, On_Ideal_Side),
+    On_Average_Side = ifelse(is.na(On_Average_Side), 0, On_Average_Side),
+    Between_Average_And_Ideal = ifelse(is.na(Between_Average_And_Ideal), 0, Between_Average_And_Ideal)
+  )
+question_position_summary_median_no3sd$Position <- "Other/NA"
+question_position_summary_median_no3sd$Position[question_position_summary_median_no3sd$Between_Average_And_Ideal == 1] <- "Between Average and Ideal"
+question_position_summary_median_no3sd$Position[question_position_summary_median_no3sd$Between_Average_And_Ideal == 0 & question_position_summary_median_no3sd$On_Ideal_Side == 1 & question_position_summary_median_no3sd$On_Average_Side == 0] <- "Beyond Ideal"
+question_position_summary_median_no3sd$Position[question_position_summary_median_no3sd$Between_Average_And_Ideal == 0 & question_position_summary_median_no3sd$On_Average_Side == 1 & question_position_summary_median_no3sd$On_Ideal_Side == 0] <- "Beyond Average"
+question_position_summary_median_no3sd$Position[
+    !is.na(question_position_summary_median_no3sd$Average_Value) &
+    !is.na(question_position_summary_median_no3sd$Ideal_Value) &
+    question_position_summary_median_no3sd$Average_Value == question_position_summary_median_no3sd$Ideal_Value] <- "Average = Ideal"
+
+# Display the question position summary
+kable(question_position_summary_median_no3sd[, c("Question", "Average_Value", "Ideal_Value", "Reasonable_Value", "Position")],
+      caption = "Position of Median Reasonable Rating (NO 3SD Removal) Relative to Average and Ideal") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+# Count the number of questions in each position category
+position_counts_median_no3sd <- table(question_position_summary_median_no3sd$Position)
+position_summary_median_no3sd <- data.frame(Position = names(position_counts_median_no3sd), Count = as.numeric(position_counts_median_no3sd))
+total_categorized_no3sd <- sum(position_summary_median_no3sd$Count)
+position_summary_median_no3sd$Percentage <- ifelse(total_categorized_no3sd > 0, (position_summary_median_no3sd$Count / total_categorized_no3sd) * 100, 0)
+position_summary_median_no3sd$Percentage <- round(position_summary_median_no3sd$Percentage, 1)
+
+# Display the position count summary
+kable(position_summary_median_no3sd, caption = "Distribution of Position Categories (Median Values, NO 3SD Removal)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+# Create distribution plot
+position_distribution_plot_median_no3sd <- ggplot(position_summary_median_no3sd, aes(x = Position, y = Count, fill = Position)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(Count)), vjust = -0.5, size = 4) +
+  labs(title = "Distribution of Position Categories (Median Values, NO 3SD Removal)",
+       subtitle = "Where does 'Reasonable' fall relative to 'Average' and 'Ideal'?",
+       x = "Position Category", y = "Number of Questions") +
+  theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9, angle = 15, hjust = 1), legend.position = "none")
+print(position_distribution_plot_median_no3sd)
+ggsave("position_distribution_median_no3sd_removed.png", position_distribution_plot_median_no3sd, width = 10, height = 7, dpi = 300)
+
+# Create scatterplot
+plot_data_intermediacy_no3sd <- question_position_summary_median_no3sd %>% filter(!is.na(Average_Value) & !is.na(Ideal_Value) & !is.na(Reasonable_Value))
+prop_both_no3sd_fmt <- scales::percent(ifelse(valid_questions_both_no3sd > 0, count_both_sides_median_no3sd/valid_questions_both_no3sd, 0), accuracy=0.1)
+intermediacy_plot_median_no3sd <- ggplot(plot_data_intermediacy_no3sd, aes(x = Average_Value, y = Ideal_Value)) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", alpha = 0.5) +
+  geom_point(color = "gray60", size = 3, alpha = 0.6) +
+  geom_point(aes(x = Average_Value, y = Reasonable_Value, color = Position), size = 4) +
+  geom_segment(aes(x = Average_Value, xend = Average_Value, y = Ideal_Value, yend = Reasonable_Value, color = Position), linetype = "dotted", size = 0.5, alpha = 0.7) +
+  scale_color_brewer(palette = "Set1") +
+  labs(title = "Intermediacy Analysis (Median, NO 3SD Removal): Position of Reasonable",
+       subtitle = paste0("Between Avg and Ideal: ", count_both_sides_median_no3sd, " of ", valid_questions_both_no3sd, " (", prop_both_no3sd_fmt, ")"),
+       x = "Median Average Rating (NO 3SD Removal)", y = "Median Rating Value (NO 3SD Removal)", color = "Position Category") +
+  theme_minimal() + theme(plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9), legend.position = "bottom")
+print(intermediacy_plot_median_no3sd)
+ggsave("intermediacy_analysis_median_no3sd_removed.png", intermediacy_plot_median_no3sd, width = 10, height = 8, dpi = 300)
+
+# Create rating patterns plot
+ratings_long_median_no3sd <- question_position_summary_median_no3sd %>%
+  select(Question, Average_Value, Ideal_Value, Reasonable_Value, Position) %>%
+  pivot_longer(cols = c(Average_Value, Ideal_Value, Reasonable_Value), names_to = "Rating_Type", values_to = "Value") %>%
+  mutate(Rating_Type = factor(gsub("_Value", "", Rating_Type), levels = c("Average", "Reasonable", "Ideal"))) %>%
+  filter(!is.na(Value))
+rating_patterns_plot_median_no3sd <- ggplot(ratings_long_median_no3sd, aes(x = Rating_Type, y = Value, group = Question, color = Position)) +
+  geom_line(alpha = 0.5) + geom_point(size = 2.5, alpha=0.7) + facet_wrap(~ Position, scales = "free_y") +
+  scale_color_brewer(palette = "Set1") +
+  labs(title = "Rating Patterns by Position Category (Median Values, NO 3SD Removal)",
+       subtitle = "How Average, Ideal, and Reasonable median ratings relate within each category",
+       x = "Rating Type", y = "Median Value (NO 3SD Removal)") +
+  theme_minimal() + theme(plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text.x = element_text(size = 9, angle = 45, hjust = 1), axis.text.y = element_text(size = 9), strip.text = element_text(size=10, face="bold"), legend.position = "none")
+print(rating_patterns_plot_median_no3sd)
+ggsave("rating_patterns_by_position_median_no3sd_removed.png", rating_patterns_plot_median_no3sd, width = 12, height = 8, dpi = 300)
+
+# Store results
+analysis_4_results_no3sd <- list(
+  ideal_side = list(vector=ideal_side_vector_median_no3sd, count=count_ideal_side_median_no3sd, valid_n=valid_questions_ideal_no3sd, binomial_test=binomial_result_ideal_median_no3sd, summary_row=intermediacy_summary_no3sd[1,]),
+  average_side = list(vector=average_side_vector_median_no3sd, count=count_average_side_median_no3sd, valid_n=valid_questions_avg_no3sd, binomial_test=binomial_result_avg_side_median_no3sd, summary_row=intermediacy_summary_no3sd[2,]),
+  both_sides = list(vector=both_sides_vector_median_no3sd, count=count_both_sides_median_no3sd, valid_n=valid_questions_both_no3sd, binomial_test=binomial_result_both_sides_median_no3sd, summary_row=intermediacy_summary_no3sd[3,]),
+  combined_summary = intermediacy_summary_no3sd,
+  question_position = question_position_summary_median_no3sd,
+  position_summary = position_summary_median_no3sd
+)
+```
+# Analysis 4 [WITH 3 SD Outlier Removal]: Overall results, intermediacy with median ratings
+
+Step 1 and Step 2 have been completed in the earlier analysis.
+
+#### Functions for Analysis 4
+
+```{r}
+# Function to check if reasonable is on the "ideal side" of average
+# Equal median ratings are treated as being on the predicted side
+is_ideal_side_median <- function(average, ideal, reasonable) {
+  if (any(is.na(c(average, ideal, reasonable)))) {
+    return(NA)
+  }
+  # Check if distance to ideal is less than or equal to distance to average
+  ifelse(abs(reasonable - ideal) <= abs(reasonable - average), 1, 0)
+}
+
+# Function to check if reasonable is on the "average side" of ideal
+# Equal median ratings are treated as being on the predicted side
+is_average_side_median <- function(average, ideal, reasonable) {
+  if (any(is.na(c(average, ideal, reasonable)))) {
+      return(NA)
+  }
+  # Check if distance to average is less than or equal to distance to ideal
+  ifelse(abs(reasonable - average) <= abs(reasonable - ideal), 1, 0)
+}
+
+# Function to check if reasonable falls between average and ideal (inclusive)
+# Handles cases where average == ideal
+is_both_sides_median <- function(average, ideal, reasonable) {
+  if (any(is.na(c(average, ideal, reasonable)))) {
+      return(NA)
+  }
+  # Check if reasonable is numerically between average and ideal, inclusive
+  # This works regardless of whether average > ideal or ideal > average
+  ifelse((reasonable >= min(average, ideal)) & (reasonable <= max(average, ideal)), 1, 0)
+}
+```
+
+#### Steps 3, 4, 5: Intermediacy Calculations (WITH 3SD Removal)
+
+```{r}
+# --- Calculate all vectors ---
+ideal_side_vector_median_3sd <- mapply(is_ideal_side_median, column_medians_average_3sd, column_medians_ideal_3sd, column_medians_reasonable_3sd)
+average_side_vector_median_3sd <- mapply(is_average_side_median, column_medians_average_3sd, column_medians_ideal_3sd, column_medians_reasonable_3sd)
+both_sides_vector_median_3sd <- mapply(is_both_sides_median, column_medians_average_3sd, column_medians_ideal_3sd, column_medians_reasonable_3sd)
+
+# --- Calculate counts and valid Ns ---
+count_ideal_side_median_3sd <- sum(ideal_side_vector_median_3sd, na.rm = TRUE)
+valid_questions_ideal_3sd <- sum(!is.na(ideal_side_vector_median_3sd))
+count_average_side_median_3sd <- sum(average_side_vector_median_3sd, na.rm = TRUE)
+valid_questions_avg_3sd <- sum(!is.na(average_side_vector_median_3sd))
+count_both_sides_median_3sd <- sum(both_sides_vector_median_3sd, na.rm = TRUE)
+valid_questions_both_3sd <- sum(!is.na(both_sides_vector_median_3sd))
+
+# --- Perform binomial tests ---
+p_val_ideal_3sd <- NA; binomial_result_ideal_median_3sd <- NULL
+if (valid_questions_ideal_3sd > 0) {
+  binomial_result_ideal_median_3sd <- binom.test(count_ideal_side_median_3sd, valid_questions_ideal_3sd, p = 0.5, alternative = "greater")
+  p_val_ideal_3sd <- binomial_result_ideal_median_3sd$p.value
+}
+
+p_val_avg_3sd <- NA; binomial_result_avg_side_median_3sd <- NULL
+if (valid_questions_avg_3sd > 0) {
+  binomial_result_avg_side_median_3sd <- binom.test(count_average_side_median_3sd, valid_questions_avg_3sd, p = 0.5, alternative = "greater")
+   p_val_avg_3sd <- binomial_result_avg_side_median_3sd$p.value
+}
+
+p_val_both_3sd <- NA; binomial_result_both_sides_median_3sd <- NULL
+if (valid_questions_both_3sd > 0) {
+  binomial_result_both_sides_median_3sd <- binom.test(count_both_sides_median_3sd, valid_questions_both_3sd, p = 1/3, alternative = "two.sided")
+  p_val_both_3sd <- binomial_result_both_sides_median_3sd$p.value
+}
+
+# --- Create ONE combined summary table ---
+intermediacy_summary_3sd <- data.frame(
+  Test = c("On Ideal Side of Average", "On Average Side of Ideal", "Between Average and Ideal"),
+  Count = c(count_ideal_side_median_3sd, count_average_side_median_3sd, count_both_sides_median_3sd),
+  Total_Valid = c(valid_questions_ideal_3sd, valid_questions_avg_3sd, valid_questions_both_3sd),
+  Proportion = c(ifelse(valid_questions_ideal_3sd > 0, count_ideal_side_median_3sd / valid_questions_ideal_3sd, NA),
+                 ifelse(valid_questions_avg_3sd > 0, count_average_side_median_3sd / valid_questions_avg_3sd, NA),
+                 ifelse(valid_questions_both_3sd > 0, count_both_sides_median_3sd / valid_questions_both_3sd, NA)),
+  Expected_Prop = c(0.5, 0.5, 1/3),
+  p_value = c(p_val_ideal_3sd, p_val_avg_3sd, p_val_both_3sd)
+)
+
+# Format proportions and p-values
+intermediacy_summary_3sd$Proportion <- scales::percent(intermediacy_summary_3sd$Proportion, accuracy = 0.1)
+intermediacy_summary_3sd$Expected_Prop <- scales::percent(intermediacy_summary_3sd$Expected_Prop, accuracy = 0.1)
+intermediacy_summary_3sd$p_value <- sapply(intermediacy_summary_3sd$p_value, format_pvalue)
+
+# Display the summary table
+kable(intermediacy_summary_3sd[,c("Test", "Count", "Total_Valid", "Proportion", "Expected_Prop", "p_value")],
+      caption = "Intermediacy Binomial Tests (WITH 3SD Removal)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+```
+
+#### 6. Plots and Reporting (Intermediacy - Median Analysis, WITH 3SD Removed)
+
+```{r}
+# Create a table showing the results for each question
+question_position_summary_median_3sd <- data.frame(
+  Question = names(column_medians_average_3sd),
+  Average_Value = column_medians_average_3sd,
+  Ideal_Value = column_medians_ideal_3sd,
+  Reasonable_Value = column_medians_reasonable_3sd,
+  On_Ideal_Side = ideal_side_vector_median_3sd,
+  On_Average_Side = average_side_vector_median_3sd,
+  Between_Average_And_Ideal = both_sides_vector_median_3sd
+)
+# Handle NAs and Categorize
+question_position_summary_median_3sd <- question_position_summary_median_3sd %>%
+  mutate(
+    On_Ideal_Side = ifelse(is.na(On_Ideal_Side), 0, On_Ideal_Side),
+    On_Average_Side = ifelse(is.na(On_Average_Side), 0, On_Average_Side),
+    Between_Average_And_Ideal = ifelse(is.na(Between_Average_And_Ideal), 0, Between_Average_And_Ideal)
+  )
+question_position_summary_median_3sd$Position <- "Other/NA"
+question_position_summary_median_3sd$Position[question_position_summary_median_3sd$Between_Average_And_Ideal == 1] <- "Between Average and Ideal"
+question_position_summary_median_3sd$Position[question_position_summary_median_3sd$Between_Average_And_Ideal == 0 & question_position_summary_median_3sd$On_Ideal_Side == 1 & question_position_summary_median_3sd$On_Average_Side == 0] <- "Beyond Ideal"
+question_position_summary_median_3sd$Position[question_position_summary_median_3sd$Between_Average_And_Ideal == 0 & question_position_summary_median_3sd$On_Average_Side == 1 & question_position_summary_median_3sd$On_Ideal_Side == 0] <- "Beyond Average"
+question_position_summary_median_3sd$Position[
+    !is.na(question_position_summary_median_3sd$Average_Value) &
+    !is.na(question_position_summary_median_3sd$Ideal_Value) &
+    question_position_summary_median_3sd$Average_Value == question_position_summary_median_3sd$Ideal_Value] <- "Average = Ideal"
+
+# Display the question position summary
+kable(question_position_summary_median_3sd[, c("Question", "Average_Value", "Ideal_Value", "Reasonable_Value", "Position")],
+      caption = "Position of Median Reasonable Rating (WITH 3SD Removal) Relative to Average and Ideal") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+# Count the number of questions in each position category
+position_counts_median_3sd <- table(question_position_summary_median_3sd$Position)
+position_summary_median_3sd <- data.frame(Position = names(position_counts_median_3sd), Count = as.numeric(position_counts_median_3sd))
+total_categorized_3sd <- sum(position_summary_median_3sd$Count)
+position_summary_median_3sd$Percentage <- ifelse(total_categorized_3sd > 0, (position_summary_median_3sd$Count / total_categorized_3sd) * 100, 0)
+position_summary_median_3sd$Percentage <- round(position_summary_median_3sd$Percentage, 1)
+
+# Display the position count summary
+kable(position_summary_median_3sd, caption = "Distribution of Position Categories (Median Values, WITH 3SD Removal)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+# Create distribution plot
+position_distribution_plot_median_3sd <- ggplot(position_summary_median_3sd, aes(x = Position, y = Count, fill = Position)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(Count)), vjust = -0.5, size = 4) +
+  labs(title = "Distribution of Position Categories (Median Values, WITH 3SD Removal)",
+       subtitle = "Where does 'Reasonable' fall relative to 'Average' and 'Ideal'?",
+       x = "Position Category", y = "Number of Questions") +
+  theme_minimal() + theme( plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9, angle = 15, hjust = 1), legend.position = "none")
+print(position_distribution_plot_median_3sd)
+ggsave("position_distribution_median_with_3sd_removed.png", position_distribution_plot_median_3sd, width = 10, height = 7, dpi = 300)
+
+# Create scatterplot
+plot_data_intermediacy_3sd <- question_position_summary_median_3sd %>% filter(!is.na(Average_Value) & !is.na(Ideal_Value) & !is.na(Reasonable_Value))
+prop_both_3sd_fmt <- scales::percent(ifelse(valid_questions_both_3sd > 0, count_both_sides_median_3sd/valid_questions_both_3sd, 0), accuracy=0.1)
+intermediacy_plot_median_3sd <- ggplot(plot_data_intermediacy_3sd, aes(x = Average_Value, y = Ideal_Value)) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", alpha = 0.5) +
+  geom_point(color = "gray60", size = 3, alpha = 0.6) +
+  geom_point(aes(x = Average_Value, y = Reasonable_Value, color = Position), size = 4) +
+  geom_segment(aes(x = Average_Value, xend = Average_Value, y = Ideal_Value, yend = Reasonable_Value, color = Position), linetype = "dotted", size = 0.5, alpha = 0.7) +
+  scale_color_brewer(palette = "Set1") +
+  labs(title = "Intermediacy Analysis (Median, WITH 3SD Removal): Position of Reasonable",
+       subtitle = paste0("Between Avg and Ideal: ", count_both_sides_median_3sd, " of ", valid_questions_both_3sd, " (", prop_both_3sd_fmt, ")"),
+       x = "Median Average Rating (WITH 3SD Removal)", y = "Median Rating Value (WITH 3SD Removal)", color = "Position Category") +
+  theme_minimal() + theme(plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text = element_text(size = 9), legend.position = "bottom")
+print(intermediacy_plot_median_3sd)
+ggsave("intermediacy_analysis_median_with_3sd_removed.png", intermediacy_plot_median_3sd, width = 10, height = 8, dpi = 300)
+
+# Create rating patterns plot
+ratings_long_median_3sd <- question_position_summary_median_3sd %>%
+  select(Question, Average_Value, Ideal_Value, Reasonable_Value, Position) %>%
+  pivot_longer(cols = c(Average_Value, Ideal_Value, Reasonable_Value), names_to = "Rating_Type", values_to = "Value") %>%
+  mutate(Rating_Type = factor(gsub("_Value", "", Rating_Type), levels = c("Average", "Reasonable", "Ideal"))) %>%
+  filter(!is.na(Value))
+rating_patterns_plot_median_3sd <- ggplot(ratings_long_median_3sd, aes(x = Rating_Type, y = Value, group = Question, color = Position)) +
+  geom_line(alpha = 0.5) + geom_point(size = 2.5, alpha=0.7) + facet_wrap(~ Position, scales = "free_y") +
+  scale_color_brewer(palette = "Set1") +
+  labs(title = "Rating Patterns by Position Category (Median Values, WITH 3SD Removal)",
+       subtitle = "How Average, Ideal, and Reasonable median ratings relate within each category",
+       x = "Rating Type", y = "Median Value (WITH 3SD Removal)") +
+  theme_minimal() + theme(plot.title = element_text(size = 12, face = "bold"), plot.subtitle = element_text(size = 11), axis.title = element_text(size = 10), axis.text.x = element_text(size = 9, angle = 45, hjust = 1), axis.text.y = element_text(size = 9), strip.text = element_text(size=10, face="bold"), legend.position = "none")
+print(rating_patterns_plot_median_3sd)
+ggsave("rating_patterns_by_position_median_with_3sd_removed.png", rating_patterns_plot_median_3sd, width = 12, height = 8, dpi = 300)
+
+# Store results
+analysis_4_results_3sd <- list(
+  ideal_side = list(vector=ideal_side_vector_median_3sd, count=count_ideal_side_median_3sd, valid_n=valid_questions_ideal_3sd, binomial_test=binomial_result_ideal_median_3sd, summary_row=intermediacy_summary_3sd[1,]),
+  average_side = list(vector=average_side_vector_median_3sd, count=count_average_side_median_3sd, valid_n=valid_questions_avg_3sd, binomial_test=binomial_result_avg_side_median_3sd, summary_row=intermediacy_summary_3sd[2,]),
+  both_sides = list(vector=both_sides_vector_median_3sd, count=count_both_sides_median_3sd, valid_n=valid_questions_both_3sd, binomial_test=binomial_result_both_sides_median_3sd, summary_row=intermediacy_summary_3sd[3,]),
+  combined_summary = intermediacy_summary_3sd,
+  question_position = question_position_summary_median_3sd,
+  position_summary = position_summary_median_3sd
+)
+```
+# Analysis 7 [NO 3 SD Removed]
+
+```{r}
+# Get unique country names
+countries <- unique(Data_All$Country_name)
+print(countries)
+```
+
+#### 7a (Small constant inf values): Country Regressions (NO 3SD Removal)
+
+```{r}
+# Create storage
+country_results_median_no3sd_smallval <- list()
+
+# Function to analyze median data for a single country (NO 3SD, Small Constant Log)
+analyze_country_median_no3sd_smallval <- function(country, data_avg, data_ideal, data_reas, q_cols) {
+  cat("\n========== Analyzing Median Data (NO 3SD, Log Small Const) for:", country, "==========\n")
+
+  # Filter data by country AND apply attention check (using _Pass1 data)
+  country_average_pass <- data_avg %>% filter(Country_name == country, q19 == 15)
+  country_ideal_pass <- data_ideal %>% filter(Country_name == country, q19 == 15)
+  country_reasonable_pass <- data_reas %>% filter(Country_name == country, q19 == 15)
+
+  n_avg <- nrow(country_average_pass)
+  n_ideal <- nrow(country_ideal_pass)
+  n_reas <- nrow(country_reasonable_pass)
+
+  cat("Participants after attention check:", n_avg, n_ideal, n_reas, "\n")
+
+  if(n_avg < 1 || n_ideal < 1 || n_reas < 1) {
+      cat("Insufficient participants for", country, "\n"); return(NULL)
+  }
+
+   convert_to_numeric <- function(df, cols) { df %>% mutate(across(all_of(cols), ~ suppressWarnings(as.numeric(as.character(.))))) }
+   country_average_pass <- convert_to_numeric(country_average_pass, q_cols)
+   country_ideal_pass <- convert_to_numeric(country_ideal_pass, q_cols)
+   country_reasonable_pass <- convert_to_numeric(country_reasonable_pass, q_cols)
+
+  # Calculate medians
+  medians_avg <- if(n_avg > 0) sapply(country_average_pass[, q_cols], median, na.rm = TRUE) else rep(NA, length(q_cols))
+  medians_ideal <- if(n_ideal > 0) sapply(country_ideal_pass[, q_cols], median, na.rm = TRUE) else rep(NA, length(q_cols))
+  medians_reas <- if(n_reas > 0) sapply(country_reasonable_pass[, q_cols], median, na.rm = TRUE) else rep(NA, length(q_cols))
+  names(medians_avg) <- q_cols; names(medians_ideal) <- q_cols; names(medians_reas) <- q_cols
+
+  # Convert to log scale (Small Constant)
+  log_medians_avg <- log_smallvalue(medians_avg)
+  log_medians_ideal <- log_smallvalue(medians_ideal)
+  log_medians_reas <- log_smallvalue(medians_reas)
+
+  # Data frame for regression
+  data_for_aic <- data.frame(Reasonable = log_medians_reas, Average = log_medians_avg, Ideal = log_medians_ideal)
+  data_for_aic_clean <- data_for_aic %>% filter(is.finite(Reasonable) & is.finite(Average) & is.finite(Ideal))
+
+  # Check for sufficient data points for regression
+  if(nrow(data_for_aic_clean) < 5) {
+    cat("Too few valid data points for regression analysis in", country, "\n")
+    return(list(country=country, sample_sizes=list(after_attention=c(n_avg, n_ideal, n_reas)), medians=list(average=medians_avg, ideal=medians_ideal, reasonable=medians_reas), log_medians=list(average=log_medians_avg, ideal=log_medians_ideal, reasonable=log_medians_reas), regression_summary=NULL, best_model="Insufficient Data"))
+  }
+
+  # Run Regressions
+  model1 <- lm(Reasonable ~ Average, data = data_for_aic_clean)
+  aic1 <- AIC(model1); r2_1 <- summary(model1)$r.squared
+  model2 <- lm(Reasonable ~ Ideal, data = data_for_aic_clean)
+  aic2 <- AIC(model2); r2_2 <- summary(model2)$r.squared
+  model3 <- lm(Reasonable ~ Average + Ideal, data = data_for_aic_clean)
+  aic3 <- AIC(model3); r2_3 <- summary(model3)$r.squared
+
+  # Regression summary
+  reg_summary <- data.frame(Model=c("Avg", "Ideal", "Both"), AIC=c(aic1, aic2, aic3), R_squared=c(r2_1, r2_2, r2_3))
+  best_model_idx <- which.min(c(aic1, aic2, aic3))
+  best_model_name <- c("Average", "Ideal", "Hybrid")[best_model_idx]
+
+  cat("Best model (NO 3SD, Log Small Const):", best_model_name, "\n")
+
+  return(list(country=country, sample_sizes=list(after_attention=c(n_avg, n_ideal, n_reas)), medians=list(average=medians_avg, ideal=medians_ideal, reasonable=medians_reas), log_medians=list(average=log_medians_avg, ideal=log_medians_ideal, reasonable=log_medians_reas), regression_models=list(model1=model1, model2=model2, model3=model3), regression_summary=reg_summary, aic_values=c(Model1=aic1, Model2=aic2, Model3=aic3), best_model=best_model_name))
+}
+
+# Run analysis for each country
+for(country in countries) {
+  country_results_median_no3sd_smallval[[country]] <- analyze_country_median_no3sd_smallval(country, Data_All_Average_Pass1, Data_All_Ideal_Pass1, Data_All_Reasonable_Pass1, question_cols)
+}
+
+# Extract AIC summary
+country_aic_summary_median_no3sd_smallval <- data.frame( Country = character(), AIC_Average = numeric(), AIC_Ideal = numeric(), AIC_Hybrid = numeric(), R2_Average = numeric(), R2_Ideal = numeric(), R2_Hybrid = numeric(), Best_Model = character(), N_Avg = integer(), N_Ideal = integer(), N_Reas = integer(), stringsAsFactors = FALSE )
+for(country in countries) {
+  res <- country_results_median_no3sd_smallval[[country]]
+  if(!is.null(res)) {
+      country_aic_summary_median_no3sd_smallval <- rbind(country_aic_summary_median_no3sd_smallval, data.frame( Country = country, AIC_Average = ifelse(!is.null(res$aic_values), res$aic_values["Model1"], NA), AIC_Ideal = ifelse(!is.null(res$aic_values), res$aic_values["Model2"], NA), AIC_Hybrid = ifelse(!is.null(res$aic_values), res$aic_values["Model3"], NA), R2_Average = ifelse(!is.null(res$regression_summary), res$regression_summary$R_squared[1], NA), R2_Ideal = ifelse(!is.null(res$regression_summary), res$regression_summary$R_squared[2], NA), R2_Hybrid = ifelse(!is.null(res$regression_summary), res$regression_summary$R_squared[3], NA), Best_Model = res$best_model, N_Avg = res$sample_sizes$after_attention[1], N_Ideal = res$sample_sizes$after_attention[2], N_Reas = res$sample_sizes$after_attention[3], stringsAsFactors = FALSE))
+  }
+}
+
+# Display summary table - THIS WILL RENDER CORRECTLY IN KNITTED HTML
+kable(country_aic_summary_median_no3sd_smallval, caption = "AIC/R² by Country (Median, NO 3SD, Log Small Constant)", digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
+  column_spec(8, background = case_when( is.na(country_aic_summary_median_no3sd_smallval$Best_Model) ~ "white", country_aic_summary_median_no3sd_smallval$Best_Model == "Hybrid" ~ "#e6f7ff", country_aic_summary_median_no3sd_smallval$Best_Model == "Average" ~ "#e6ffe6", country_aic_summary_median_no3sd_smallval$Best_Model == "Ideal" ~ "#ffe6e6", TRUE ~ "#f2f2f2" ))
+```
+#### 7b (Plus one to all values): Country Regressions (NO 3SD Removal)
+
+```{r}
+# Create storage
+country_results_median_no3sd_plusone <- list()
+
+# Function to analyze median data for a single country (NO 3SD, Plus One Log)
+analyze_country_median_no3sd_plusone <- function(country, data_avg, data_ideal, data_reas, q_cols) {
+  cat("\n========== Analyzing Median Data (NO 3SD, Log+1) for:", country, "==========\n")
+
+  # Filter data by country AND apply attention check (using _Pass1 data)
+  country_average_pass <- data_avg %>% filter(Country_name == country, q19 == 15)
+  country_ideal_pass <- data_ideal %>% filter(Country_name == country, q19 == 15)
+  country_reasonable_pass <- data_reas %>% filter(Country_name == country, q19 == 15)
+
+  n_avg <- nrow(country_average_pass)
+  n_ideal <- nrow(country_ideal_pass)
+  n_reas <- nrow(country_reasonable_pass)
+
+  cat("Participants after attention check:", n_avg, n_ideal, n_reas, "\n")
+
+  if(n_avg < 1 || n_ideal < 1 || n_reas < 1) {
+      cat("Insufficient participants for", country, "\n"); return(NULL)
+  }
+
+   convert_to_numeric <- function(df, cols) { df %>% mutate(across(all_of(cols), ~ suppressWarnings(as.numeric(as.character(.))))) }
+   country_average_pass <- convert_to_numeric(country_average_pass, q_cols)
+   country_ideal_pass <- convert_to_numeric(country_ideal_pass, q_cols)
+   country_reasonable_pass <- convert_to_numeric(country_reasonable_pass, q_cols)
+
+  # Calculate medians
+  medians_avg <- if(n_avg > 0) sapply(country_average_pass[, q_cols], median, na.rm = TRUE) else rep(NA, length(q_cols))
+  medians_ideal <- if(n_ideal > 0) sapply(country_ideal_pass[, q_cols], median, na.rm = TRUE) else rep(NA, length(q_cols))
+  medians_reas <- if(n_reas > 0) sapply(country_reasonable_pass[, q_cols], median, na.rm = TRUE) else rep(NA, length(q_cols))
+  names(medians_avg) <- q_cols; names(medians_ideal) <- q_cols; names(medians_reas) <- q_cols
+
+  # Convert to log scale (Plus One)
+  log_medians_avg <- log_plus_one(medians_avg)
+  log_medians_ideal <- log_plus_one(medians_ideal)
+  log_medians_reas <- log_plus_one(medians_reas)
+
+  # Data frame for regression
+  data_for_aic <- data.frame(Reasonable = log_medians_reas, Average = log_medians_avg, Ideal = log_medians_ideal)
+  data_for_aic_clean <- data_for_aic %>% filter(is.finite(Reasonable) & is.finite(Average) & is.finite(Ideal))
+
+  # Check for sufficient data points for regression
+  if(nrow(data_for_aic_clean) < 5) {
+    cat("Too few valid data points for regression analysis in", country, "\n")
+    return(list(country=country, sample_sizes=list(after_attention=c(n_avg, n_ideal, n_reas)), medians=list(average=medians_avg, ideal=medians_ideal, reasonable=medians_reas), log_medians=list(average=log_medians_avg, ideal=log_medians_ideal, reasonable=log_medians_reas), regression_summary=NULL, best_model="Insufficient Data"))
+  }
+
+  # Run Regressions
+  model1 <- lm(Reasonable ~ Average, data = data_for_aic_clean)
+  aic1 <- AIC(model1); r2_1 <- summary(model1)$r.squared
+  model2 <- lm(Reasonable ~ Ideal, data = data_for_aic_clean)
+  aic2 <- AIC(model2); r2_2 <- summary(model2)$r.squared
+  model3 <- lm(Reasonable ~ Average + Ideal, data = data_for_aic_clean)
+  aic3 <- AIC(model3); r2_3 <- summary(model3)$r.squared
+
+  # Regression summary
+  reg_summary <- data.frame(Model=c("Avg", "Ideal", "Both"), AIC=c(aic1, aic2, aic3), R_squared=c(r2_1, r2_2, r2_3))
+  best_model_idx <- which.min(c(aic1, aic2, aic3))
+  best_model_name <- c("Average", "Ideal", "Hybrid")[best_model_idx]
+
+  cat("Best model (NO 3SD, Log+1):", best_model_name, "\n") # Keep this text output if desired
+
+  return(list(country=country, sample_sizes=list(after_attention=c(n_avg, n_ideal, n_reas)), medians=list(average=medians_avg, ideal=medians_ideal, reasonable=medians_reas), log_medians=list(average=log_medians_avg, ideal=log_medians_ideal, reasonable=log_medians_reas), regression_models=list(model1=model1, model2=model2, model3=model3), regression_summary=reg_summary, aic_values=c(Model1=aic1, Model2=aic2, Model3=aic3), best_model=best_model_name))
+}
+
+# Run analysis for each country
+for(country in countries) {
+  country_results_median_no3sd_plusone[[country]] <- analyze_country_median_no3sd_plusone(country, Data_All_Average_Pass1, Data_All_Ideal_Pass1, Data_All_Reasonable_Pass1, question_cols)
+}
+
+# Extract AIC summary
+country_aic_summary_median_no3sd_plusone <- data.frame( Country = character(), AIC_Average = numeric(), AIC_Ideal = numeric(), AIC_Hybrid = numeric(), R2_Average = numeric(), R2_Ideal = numeric(), R2_Hybrid = numeric(), Best_Model = character(), N_Avg = integer(), N_Ideal = integer(), N_Reas = integer(), stringsAsFactors = FALSE )
+for(country in countries) {
+  res <- country_results_median_no3sd_plusone[[country]]
+  if(!is.null(res)) {
+      country_aic_summary_median_no3sd_plusone <- rbind(country_aic_summary_median_no3sd_plusone, data.frame( Country = country, AIC_Average = ifelse(!is.null(res$aic_values), res$aic_values["Model1"], NA), AIC_Ideal = ifelse(!is.null(res$aic_values), res$aic_values["Model2"], NA), AIC_Hybrid = ifelse(!is.null(res$aic_values), res$aic_values["Model3"], NA), R2_Average = ifelse(!is.null(res$regression_summary), res$regression_summary$R_squared[1], NA), R2_Ideal = ifelse(!is.null(res$regression_summary), res$regression_summary$R_squared[2], NA), R2_Hybrid = ifelse(!is.null(res$regression_summary), res$regression_summary$R_squared[3], NA), Best_Model = res$best_model, N_Avg = res$sample_sizes$after_attention[1], N_Ideal = res$sample_sizes$after_attention[2], N_Reas = res$sample_sizes$after_attention[3], stringsAsFactors = FALSE))
+  }
+}
+
+# Display summary table - THIS WILL RENDER CORRECTLY IN KNITTED HTML
+kable(country_aic_summary_median_no3sd_plusone, caption = "AIC/R² by Country (Median, NO 3SD, Log Plus One)", digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
+  column_spec(8, background = case_when( is.na(country_aic_summary_median_no3sd_plusone$Best_Model) ~ "white", country_aic_summary_median_no3sd_plusone$Best_Model == "Hybrid" ~ "#e6f7ff", country_aic_summary_median_no3sd_plusone$Best_Model == "Average" ~ "#e6ffe6", country_aic_summary_median_no3sd_plusone$Best_Model == "Ideal" ~ "#ffe6e6", TRUE ~ "#f2f2f2" ))
+```
+# Analysis 7 [WITH 3 SD Removed]
+
+#### 7a (Small constant inf values): Country Regressions (WITH 3SD Removal)
+
+```{r}
+# Create storage
+country_results_median_3sd_smallval <- list()
+
+# Function to analyze median data for a single country (WITH 3SD, Small Constant Log)
+analyze_country_median_3sd_smallval <- function(country, data_avg_filtered, data_ideal_filtered, data_reas_filtered, q_cols) {
+  cat("\n========== Analyzing Median Data (WITH 3SD, Log Small Const) for:", country, "==========\n")
+
+  # Filter data by country (using _Filtered data)
+  country_average_final <- data_avg_filtered %>% filter(Country_name == country)
+  country_ideal_final <- data_ideal_filtered %>% filter(Country_name == country)
+  country_reasonable_final <- data_reas_filtered %>% filter(Country_name == country)
+
+  n_avg <- nrow(country_average_final)
+  n_ideal <- nrow(country_ideal_final)
+  n_reas <- nrow(country_reasonable_final)
+
+  cat("Participants after ALL filters:", n_avg, n_ideal, n_reas, "\n")
+
+  if(n_avg < 1 || n_ideal < 1 || n_reas < 1) {
+      cat("Insufficient participants for", country, "\n"); return(NULL)
+  }
+
+   # Columns should already be numeric from section 3, but double-check
+   convert_to_numeric <- function(df, cols) { df %>% mutate(across(all_of(cols), ~ suppressWarnings(as.numeric(as.character(.))))) }
+   country_average_final <- convert_to_numeric(country_average_final, q_cols)
+   country_ideal_final <- convert_to_numeric(country_ideal_final, q_cols)
+   country_reasonable_final <- convert_to_numeric(country_reasonable_final, q_cols)
+
+  # Calculate medians
+  medians_avg <- if(n_avg > 0) sapply(country_average_final[, q_cols], median, na.rm = TRUE) else rep(NA, length(q_cols))
+  medians_ideal <- if(n_ideal > 0) sapply(country_ideal_final[, q_cols], median, na.rm = TRUE) else rep(NA, length(q_cols))
+  medians_reas <- if(n_reas > 0) sapply(country_reasonable_final[, q_cols], median, na.rm = TRUE) else rep(NA, length(q_cols))
+  names(medians_avg) <- q_cols; names(medians_ideal) <- q_cols; names(medians_reas) <- q_cols
+
+  # Convert to log scale (Small Constant)
+  log_medians_avg <- log_smallvalue(medians_avg)
+  log_medians_ideal <- log_smallvalue(medians_ideal)
+  log_medians_reas <- log_smallvalue(medians_reas)
+
+  # Data frame for regression
+  data_for_aic <- data.frame(Reasonable = log_medians_reas, Average = log_medians_avg, Ideal = log_medians_ideal)
+  data_for_aic_clean <- data_for_aic %>% filter(is.finite(Reasonable) & is.finite(Average) & is.finite(Ideal))
+
+  # Check for sufficient data points for regression
+  if(nrow(data_for_aic_clean) < 5) {
+    cat("Too few valid data points for regression analysis in", country, "\n")
+    return(list(country=country, sample_sizes=list(after_all_filters=c(n_avg, n_ideal, n_reas)), medians=list(average=medians_avg, ideal=medians_ideal, reasonable=medians_reas), log_medians=list(average=log_medians_avg, ideal=log_medians_ideal, reasonable=log_medians_reas), regression_summary=NULL, best_model="Insufficient Data"))
+  }
+
+  # Run Regressions
+  model1 <- lm(Reasonable ~ Average, data = data_for_aic_clean)
+  aic1 <- AIC(model1); r2_1 <- summary(model1)$r.squared
+  model2 <- lm(Reasonable ~ Ideal, data = data_for_aic_clean)
+  aic2 <- AIC(model2); r2_2 <- summary(model2)$r.squared
+  model3 <- lm(Reasonable ~ Average + Ideal, data = data_for_aic_clean)
+  aic3 <- AIC(model3); r2_3 <- summary(model3)$r.squared
+
+  # Regression summary
+  reg_summary <- data.frame(Model=c("Avg", "Ideal", "Both"), AIC=c(aic1, aic2, aic3), R_squared=c(r2_1, r2_2, r2_3))
+  best_model_idx <- which.min(c(aic1, aic2, aic3))
+  best_model_name <- c("Average", "Ideal", "Hybrid")[best_model_idx]
+
+  cat("Best model (WITH 3SD, Log Small Const):", best_model_name, "\n") # Keep this text output if desired
+
+  return(list(country=country, sample_sizes=list(after_all_filters=c(n_avg, n_ideal, n_reas)), medians=list(average=medians_avg, ideal=medians_ideal, reasonable=medians_reas), log_medians=list(average=log_medians_avg, ideal=log_medians_ideal, reasonable=log_medians_reas), regression_models=list(model1=model1, model2=model2, model3=model3), regression_summary=reg_summary, aic_values=c(Model1=aic1, Model2=aic2, Model3=aic3), best_model=best_model_name))
+}
+
+# Run analysis for each country
+for(country in countries) {
+  country_results_median_3sd_smallval[[country]] <- analyze_country_median_3sd_smallval(country, Data_All_Average_Filtered, Data_All_Ideal_Filtered, Data_All_Reasonable_Filtered, question_cols)
+}
+
+# Extract AIC summary
+country_aic_summary_median_3sd_smallval <- data.frame( Country = character(), AIC_Average = numeric(), AIC_Ideal = numeric(), AIC_Hybrid = numeric(), R2_Average = numeric(), R2_Ideal = numeric(), R2_Hybrid = numeric(), Best_Model = character(), N_Avg = integer(), N_Ideal = integer(), N_Reas = integer(), stringsAsFactors = FALSE )
+for(country in countries) {
+  res <- country_results_median_3sd_smallval[[country]]
+  if(!is.null(res)) {
+      country_aic_summary_median_3sd_smallval <- rbind(country_aic_summary_median_3sd_smallval, data.frame( Country = country, AIC_Average = ifelse(!is.null(res$aic_values), res$aic_values["Model1"], NA), AIC_Ideal = ifelse(!is.null(res$aic_values), res$aic_values["Model2"], NA), AIC_Hybrid = ifelse(!is.null(res$aic_values), res$aic_values["Model3"], NA), R2_Average = ifelse(!is.null(res$regression_summary), res$regression_summary$R_squared[1], NA), R2_Ideal = ifelse(!is.null(res$regression_summary), res$regression_summary$R_squared[2], NA), R2_Hybrid = ifelse(!is.null(res$regression_summary), res$regression_summary$R_squared[3], NA), Best_Model = res$best_model, N_Avg = res$sample_sizes$after_all_filters[1], N_Ideal = res$sample_sizes$after_all_filters[2], N_Reas = res$sample_sizes$after_all_filters[3], stringsAsFactors = FALSE))
+  }
+}
+
+# Display summary table - THIS WILL RENDER CORRECTLY IN KNITTED HTML
+kable(country_aic_summary_median_3sd_smallval, caption = "AIC/R² by Country (Median, WITH 3SD, Log Small Constant)", digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
+  column_spec(8, background = case_when( is.na(country_aic_summary_median_3sd_smallval$Best_Model) ~ "white", country_aic_summary_median_3sd_smallval$Best_Model == "Hybrid" ~ "#e6f7ff", country_aic_summary_median_3sd_smallval$Best_Model == "Average" ~ "#e6ffe6", country_aic_summary_median_3sd_smallval$Best_Model == "Ideal" ~ "#ffe6e6", TRUE ~ "#f2f2f2" ))
+```
+#### 7b (Plus one to all values): Country Regressions (WITH 3SD Removal)
+
+```{r}
+# Create storage
+country_results_median_3sd_plusone <- list()
+
+# Function to analyze median data for a single country (WITH 3SD, Plus One Log)
+analyze_country_median_3sd_plusone <- function(country, data_avg_filtered, data_ideal_filtered, data_reas_filtered, q_cols) {
+  cat("\n========== Analyzing Median Data (WITH 3SD, Log+1) for:", country, "==========\n")
+
+  # Filter data by country (using _Filtered data)
+  country_average_final <- data_avg_filtered %>% filter(Country_name == country)
+  country_ideal_final <- data_ideal_filtered %>% filter(Country_name == country)
+  country_reasonable_final <- data_reas_filtered %>% filter(Country_name == country)
+
+  n_avg <- nrow(country_average_final)
+  n_ideal <- nrow(country_ideal_final)
+  n_reas <- nrow(country_reasonable_final)
+
+  cat("Participants after ALL filters:", n_avg, n_ideal, n_reas, "\n")
+
+  if(n_avg < 1 || n_ideal < 1 || n_reas < 1) {
+      cat("Insufficient participants for", country, "\n"); return(NULL)
+  }
+
+   convert_to_numeric <- function(df, cols) { df %>% mutate(across(all_of(cols), ~ suppressWarnings(as.numeric(as.character(.))))) }
+   country_average_final <- convert_to_numeric(country_average_final, q_cols)
+   country_ideal_final <- convert_to_numeric(country_ideal_final, q_cols)
+   country_reasonable_final <- convert_to_numeric(country_reasonable_final, q_cols)
+
+  # Calculate medians
+  medians_avg <- if(n_avg > 0) sapply(country_average_final[, q_cols], median, na.rm = TRUE) else rep(NA, length(q_cols))
+  medians_ideal <- if(n_ideal > 0) sapply(country_ideal_final[, q_cols], median, na.rm = TRUE) else rep(NA, length(q_cols))
+  medians_reas <- if(n_reas > 0) sapply(country_reasonable_final[, q_cols], median, na.rm = TRUE) else rep(NA, length(q_cols))
+  names(medians_avg) <- q_cols; names(medians_ideal) <- q_cols; names(medians_reas) <- q_cols
+
+  # Convert to log scale (Plus One)
+  log_medians_avg <- log_plus_one(medians_avg)
+  log_medians_ideal <- log_plus_one(medians_ideal)
+  log_medians_reas <- log_plus_one(medians_reas)
+
+  # Data frame for regression
+  data_for_aic <- data.frame(Reasonable = log_medians_reas, Average = log_medians_avg, Ideal = log_medians_ideal)
+  data_for_aic_clean <- data_for_aic %>% filter(is.finite(Reasonable) & is.finite(Average) & is.finite(Ideal))
+
+  # Check for sufficient data points for regression
+  if(nrow(data_for_aic_clean) < 5) {
+    cat("Too few valid data points for regression analysis in", country, "\n")
+    return(list(country=country, sample_sizes=list(after_all_filters=c(n_avg, n_ideal, n_reas)), medians=list(average=medians_avg, ideal=medians_ideal, reasonable=medians_reas), log_medians=list(average=log_medians_avg, ideal=log_medians_ideal, reasonable=log_medians_reas), regression_summary=NULL, best_model="Insufficient Data"))
+  }
+
+  # Run Regressions
+  model1 <- lm(Reasonable ~ Average, data = data_for_aic_clean)
+  aic1 <- AIC(model1); r2_1 <- summary(model1)$r.squared
+  model2 <- lm(Reasonable ~ Ideal, data = data_for_aic_clean)
+  aic2 <- AIC(model2); r2_2 <- summary(model2)$r.squared
+  model3 <- lm(Reasonable ~ Average + Ideal, data = data_for_aic_clean)
+  aic3 <- AIC(model3); r2_3 <- summary(model3)$r.squared
+
+  # Regression summary
+  reg_summary <- data.frame(Model=c("Avg", "Ideal", "Both"), AIC=c(aic1, aic2, aic3), R_squared=c(r2_1, r2_2, r2_3))
+  best_model_idx <- which.min(c(aic1, aic2, aic3))
+  best_model_name <- c("Average", "Ideal", "Hybrid")[best_model_idx]
+
+  cat("Best model (WITH 3SD, Log+1):", best_model_name, "\n") # Keep this text output if desired
+
+  return(list(country=country, sample_sizes=list(after_all_filters=c(n_avg, n_ideal, n_reas)), medians=list(average=medians_avg, ideal=medians_ideal, reasonable=medians_reas), log_medians=list(average=log_medians_avg, ideal=log_medians_ideal, reasonable=log_medians_reas), regression_models=list(model1=model1, model2=model2, model3=model3), regression_summary=reg_summary, aic_values=c(Model1=aic1, Model2=aic2, Model3=aic3), best_model=best_model_name))
+}
+
+# Run analysis for each country
+for(country in countries) {
+  country_results_median_3sd_plusone[[country]] <- analyze_country_median_3sd_plusone(country, Data_All_Average_Filtered, Data_All_Ideal_Filtered, Data_All_Reasonable_Filtered, question_cols)
+}
+
+# Extract AIC summary
+country_aic_summary_median_3sd_plusone <- data.frame( Country = character(), AIC_Average = numeric(), AIC_Ideal = numeric(), AIC_Hybrid = numeric(), R2_Average = numeric(), R2_Ideal = numeric(), R2_Hybrid = numeric(), Best_Model = character(), N_Avg = integer(), N_Ideal = integer(), N_Reas = integer(), stringsAsFactors = FALSE )
+for(country in countries) {
+  res <- country_results_median_3sd_plusone[[country]]
+  if(!is.null(res)) {
+      country_aic_summary_median_3sd_plusone <- rbind(country_aic_summary_median_3sd_plusone, data.frame( Country = country, AIC_Average = ifelse(!is.null(res$aic_values), res$aic_values["Model1"], NA), AIC_Ideal = ifelse(!is.null(res$aic_values), res$aic_values["Model2"], NA), AIC_Hybrid = ifelse(!is.null(res$aic_values), res$aic_values["Model3"], NA), R2_Average = ifelse(!is.null(res$regression_summary), res$regression_summary$R_squared[1], NA), R2_Ideal = ifelse(!is.null(res$regression_summary), res$regression_summary$R_squared[2], NA), R2_Hybrid = ifelse(!is.null(res$regression_summary), res$regression_summary$R_squared[3], NA), Best_Model = res$best_model, N_Avg = res$sample_sizes$after_all_filters[1], N_Ideal = res$sample_sizes$after_all_filters[2], N_Reas = res$sample_sizes$after_all_filters[3], stringsAsFactors = FALSE))
+  }
+}
+
+# Display summary table - THIS WILL RENDER CORRECTLY IN KNITTED HTML
+kable(country_aic_summary_median_3sd_plusone, caption = "AIC/R² by Country (Median, WITH 3SD, Log Plus One)", digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
+  column_spec(8, background = case_when( is.na(country_aic_summary_median_3sd_plusone$Best_Model) ~ "white", country_aic_summary_median_3sd_plusone$Best_Model == "Hybrid" ~ "#e6f7ff", country_aic_summary_median_3sd_plusone$Best_Model == "Average" ~ "#e6ffe6", country_aic_summary_median_3sd_plusone$Best_Model == "Ideal" ~ "#ffe6e6", TRUE ~ "#f2f2f2" ))
+```
+# Analysis 8 [NO 3 SD Removed]
+
+```{r}
+# Create storage
+country_intermediacy_results_median_no3sd <- list()
+
+# Function to analyze median intermediacy for a single country (NO 3SD)
+analyze_country_intermediacy_median_no3sd <- function(country, country_results_list) {
+  cat("\n========== Analyzing Median Intermediacy (NO 3SD) for:", country, "==========\n")
+
+  # Use the median data from Analysis 7 NO 3SD
+  if(is.null(country_results_list[[country]]) || is.null(country_results_list[[country]]$medians)) {
+    cat("No valid median data from Analysis 7 for", country, "\n"); return(NULL)
+  }
+  medians_avg <- country_results_list[[country]]$medians$average
+  medians_ideal <- country_results_list[[country]]$medians$ideal
+  medians_reas <- country_results_list[[country]]$medians$reasonable
+
+  if(all(is.na(medians_avg)) || all(is.na(medians_ideal)) || all(is.na(medians_reas))){
+      cat("Median vectors contain only NAs for", country, "\n"); return(NULL)
+  }
+
+  # --- Calculate vectors, counts, and p-values ---
+  # Assumes is_ideal_side_median, is_average_side_median, is_both_sides_median are defined
+  ideal_vec <- mapply(is_ideal_side_median, medians_avg, medians_ideal, medians_reas)
+  ideal_count <- sum(ideal_vec, na.rm=TRUE); ideal_n <- sum(!is.na(ideal_vec))
+  ideal_p <- NA; ideal_test <- NULL
+  if(ideal_n > 0){ ideal_test <- tryCatch(binom.test(ideal_count, ideal_n, p=0.5, alt="greater"), error=function(e) NULL); if(!is.null(ideal_test)) ideal_p <- ideal_test$p.value }
+
+  avg_vec <- mapply(is_average_side_median, medians_avg, medians_ideal, medians_reas)
+  avg_count <- sum(avg_vec, na.rm=TRUE); avg_n <- sum(!is.na(avg_vec))
+  avg_p <- NA; avg_test <- NULL
+  if(avg_n > 0){ avg_test <- tryCatch(binom.test(avg_count, avg_n, p=0.5, alt="greater"), error=function(e) NULL); if(!is.null(avg_test)) avg_p <- avg_test$p.value }
+
+  both_vec <- mapply(is_both_sides_median, medians_avg, medians_ideal, medians_reas)
+  both_count <- sum(both_vec, na.rm=TRUE); both_n <- sum(!is.na(both_vec))
+  both_p <- NA; both_test <- NULL
+  if(both_n > 0){ both_test <- tryCatch(binom.test(both_count, both_n, p=1/3, alt="two.sided"), error=function(e) NULL); if(!is.null(both_test)) both_p <- both_test$p.value }
+
+  # Create summary table
+  summary_df <- data.frame(
+    Test = c("On Ideal Side", "On Average Side", "Between"),
+    Count = c(ideal_count, avg_count, both_count),
+    N = c(ideal_n, avg_n, both_n),
+    Prop = c(ideal_count/ideal_n, avg_count/avg_n, both_count/both_n),
+    p_value_raw = c(ideal_p, avg_p, both_p) # Store raw p-value
+  )
+  summary_df$Prop <- ifelse(is.nan(summary_df$Prop), NA, summary_df$Prop)
+  # Format p-value HERE using the defined helper function
+  summary_df$p_value_formatted <- sapply(summary_df$p_value_raw, format_pvalue)
+
+  # Return results including raw p-values
+  return(list(country=country,
+              ideal_side=list(vector=ideal_vec, count=ideal_count, n=ideal_n, prop=ideal_count/ideal_n, test=ideal_test),
+              average_side=list(vector=avg_vec, count=avg_count, n=avg_n, prop=avg_count/avg_n, test=avg_test),
+              both_sides=list(vector=both_vec, count=both_count, n=both_n, prop=both_count/both_n, test=both_test),
+              summary_df=summary_df)) # Return the df with raw and formatted p-values
+}
+
+# Run analysis for each country (using one of the NO 3SD results lists, e.g., _plusone)
+analysis_7_results_no3sd_source <- country_results_median_no3sd_plusone # Choose source
+
+for(country in countries) {
+  if (exists("analysis_7_results_no3sd_source") && !is.null(analysis_7_results_no3sd_source[[country]])) {
+    country_intermediacy_results_median_no3sd[[country]] <- analyze_country_intermediacy_median_no3sd(country, analysis_7_results_no3sd_source)
+  } else {
+    cat("\nSkipping intermediacy (NO 3SD) for", country, "due to missing results from Analysis 7.\n")
+  }
+}
+
+
+# Create summary table for median intermediacy across countries (NO 3SD)
+intermediacy_by_country_median_no3sd <- data.frame(Country=character(), Ideal_Prop=numeric(), Ideal_P=numeric(), Ideal_N=integer(), Avg_Prop=numeric(), Avg_P=numeric(), Avg_N=integer(), Between_Prop=numeric(), Between_P=numeric(), Between_N=integer(), stringsAsFactors=FALSE)
+for(country in countries) {
+  res <- country_intermediacy_results_median_no3sd[[country]]
+  if(!is.null(res) && !is.null(res$summary_df)) { # Check if summary_df exists
+    ideal_p_val <- res$summary_df$p_value_raw[1]
+    avg_p_val <- res$summary_df$p_value_raw[2]
+    between_p_val <- res$summary_df$p_value_raw[3]
+
+    intermediacy_by_country_median_no3sd <- rbind(intermediacy_by_country_median_no3sd, data.frame(Country=country,
+                                                                                                   Ideal_Prop=res$ideal_side$prop, Ideal_P=ideal_p_val, Ideal_N=res$ideal_side$n,
+                                                                                                   Avg_Prop=res$average_side$prop, Avg_P=avg_p_val, Avg_N=res$average_side$n,
+                                                                                                   Between_Prop=res$both_sides$prop, Between_P=between_p_val, Between_N=res$both_sides$n,
+                                                                                                   stringsAsFactors=FALSE))
+  } else {
+    # Add row with NAs if results for country are NULL or incomplete
+     intermediacy_by_country_median_no3sd <- rbind(intermediacy_by_country_median_no3sd, data.frame(Country=country, Ideal_Prop=NA, Ideal_P=NA, Ideal_N=NA, Avg_Prop=NA, Avg_P=NA, Avg_N=NA, Between_Prop=NA, Between_P=NA, Between_N=NA, stringsAsFactors=FALSE))
+  }
+}
+
+# Format and display
+# Handle potential NAs introduced before formatting
+intermediacy_by_country_median_no3sd <- intermediacy_by_country_median_no3sd %>%
+  mutate(
+    Ideal_Prop_Pct = ifelse(is.na(Ideal_Prop), "NA", scales::percent(Ideal_Prop, accuracy = 0.1)),
+    Avg_Prop_Pct = ifelse(is.na(Avg_Prop), "NA", scales::percent(Avg_Prop, accuracy = 0.1)),
+    Between_Prop_Pct = ifelse(is.na(Between_Prop), "NA", scales::percent(Between_Prop, accuracy = 0.1)),
+    Ideal_Sig = ifelse(!is.na(Ideal_P) & Ideal_P < 0.05, "*", ""),
+    Avg_Sig = ifelse(!is.na(Avg_P) & Avg_P < 0.05, "*", ""),
+    Between_Sig = ifelse(!is.na(Between_P) & Between_P < 0.05, "*", "")
+  )
+
+intermediacy_by_country_median_no3sd <- intermediacy_by_country_median_no3sd %>%
+  arrange(desc(Between_Prop)) # Arrange using the numeric column
+
+# Corrected select statement (replaces the old select %>% rename)
+display_intermediacy_no3sd <- intermediacy_by_country_median_no3sd %>%
+  select(Country,
+         `Ideal Side (%)` = Ideal_Prop_Pct, Ideal_Sig = Ideal_Sig,
+         `Average Side (%)` = Avg_Prop_Pct, Average_Sig = Avg_Sig,
+         `Between (%)` = Between_Prop_Pct, Between_Sig = Between_Sig
+         )
+
+kable(display_intermediacy_no3sd, caption = "Intermediacy Analysis by Country (Median, NO 3SD Removal)", align = 'lcr') %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F) %>%
+  add_header_above(c(" " = 1, "Ideal Side*" = 2, "Average Side*" = 2, "Between*" = 2)) %>%
+  column_spec(1, bold = T)
+
+# Store results
+analysis_8_results_no3sd <- list(
+  country_results = country_intermediacy_results_median_no3sd,
+  summary = intermediacy_by_country_median_no3sd # Contains raw P values and formatted props
+)
+```
+# Analysis 8 [WITH 3 SD Removed]
+
+```{r}
+# Analysis 8 [WITH 3 SD Removed]
+
+# Create storage
+country_intermediacy_results_median_3sd <- list()
+
+# Function to analyze median intermediacy for a single country (WITH 3SD)
+analyze_country_intermediacy_median_3sd <- function(country, country_results_list) {
+  cat("\n========== Analyzing Median Intermediacy (WITH 3SD) for:", country, "==========\n")
+
+  # Use the median data from Analysis 7 WITH 3SD (either _smallval or _plusone is fine)
+  if(is.null(country_results_list[[country]]) || is.null(country_results_list[[country]]$medians)) {
+    cat("No valid median data from Analysis 7 (WITH 3SD) for", country, "\n"); return(NULL)
+  }
+
+  # Extract the raw median values
+  medians_avg <- country_results_list[[country]]$medians$average
+  medians_ideal <- country_results_list[[country]]$medians$ideal
+  medians_reas <- country_results_list[[country]]$medians$reasonable
+
+  if(all(is.na(medians_avg)) || all(is.na(medians_ideal)) || all(is.na(medians_reas))){
+      cat("Median vectors contain only NAs for", country, "\n"); return(NULL)
+  }
+
+  # Ensure intermediacy functions are defined
+  # is_ideal_side_median, is_average_side_median, is_both_sides_median
+
+  # --- Calculate vectors, counts, and p-values ---
+  ideal_vec <- mapply(is_ideal_side_median, medians_avg, medians_ideal, medians_reas)
+  ideal_count <- sum(ideal_vec, na.rm=TRUE); ideal_n <- sum(!is.na(ideal_vec))
+  ideal_p <- NA; ideal_test <- NULL
+  if(ideal_n > 0){ ideal_test <- tryCatch(binom.test(ideal_count, ideal_n, p=0.5, alt="greater"), error=function(e) NULL); if(!is.null(ideal_test)) ideal_p <- ideal_test$p.value }
+
+  avg_vec <- mapply(is_average_side_median, medians_avg, medians_ideal, medians_reas)
+  avg_count <- sum(avg_vec, na.rm=TRUE); avg_n <- sum(!is.na(avg_vec))
+  avg_p <- NA; avg_test <- NULL
+  if(avg_n > 0){ avg_test <- tryCatch(binom.test(avg_count, avg_n, p=0.5, alt="greater"), error=function(e) NULL); if(!is.null(avg_test)) avg_p <- avg_test$p.value }
+
+  both_vec <- mapply(is_both_sides_median, medians_avg, medians_ideal, medians_reas)
+  both_count <- sum(both_vec, na.rm=TRUE); both_n <- sum(!is.na(both_vec))
+  both_p <- NA; both_test <- NULL
+  if(both_n > 0){ both_test <- tryCatch(binom.test(both_count, both_n, p=1/3, alt="two.sided"), error=function(e) NULL); if(!is.null(both_test)) both_p <- both_test$p.value }
+
+
+  # Create summary table
+  summary_df <- data.frame(
+    Test = c("On Ideal Side", "On Average Side", "Between"),
+    Count = c(ideal_count, avg_count, both_count),
+    N = c(ideal_n, avg_n, both_n),
+    Prop = c(ideal_count/ideal_n, avg_count/avg_n, both_count/both_n),
+    p_value = c(ideal_p, avg_p, both_p)
+  )
+  # Handle potential NaN from 0/0
+  summary_df$Prop <- ifelse(is.nan(summary_df$Prop), NA, summary_df$Prop)
+
+  summary_df$Proportion <- ifelse(is.na(summary_df$Prop), "NA", scales::percent(summary_df$Prop, accuracy=0.1))
+  summary_df$p_value <- sapply(summary_df$p_value, format_pvalue) # Ensure format_pvalue handles NA
+
+
+  ## --- REMOVED THIS LINE to prevent raw HTML output during loop ---
+  # cat("\nMedian Intermediacy Analysis (WITH 3SD Removed) for", country, ":\n")
+  # print(kable(summary_df[,c("Test", "Count", "N", "Proportion", "p_value")]) %>% kable_styling(font_size=10))
+
+  # Return results
+  return(list(country=country, ideal_side=list(vector=ideal_vec, count=ideal_count, n=ideal_n, prop=ideal_count/ideal_n, test=ideal_test), average_side=list(vector=avg_vec, count=avg_count, n=avg_n, prop=avg_count/avg_n, test=avg_test), both_sides=list(vector=both_vec, count=both_count, n=both_n, prop=both_count/both_n, test=both_test), summary=summary_df))
+}
+
+# Run analysis for each country (using one of the WITH 3SD results lists)
+for(country in countries) {
+ # Ensure the source list exists and has data for the country
+  if (exists("country_results_median_3sd_plusone") && !is.null(country_results_median_3sd_plusone[[country]])) {
+      country_intermediacy_results_median_3sd[[country]] <- analyze_country_intermediacy_median_3sd(country, country_results_median_3sd_plusone) # Using _plusone results arbitrarily
+  } else {
+      cat("\nSkipping intermediacy for", country, "due to missing results from Analysis 7 (WITH 3SD).\n")
+  }
+}
+
+# Create summary table for median intermediacy across countries (WITH 3SD)
+intermediacy_by_country_median_3sd <- data.frame(Country=character(), Ideal_Prop=numeric(), Ideal_P=numeric(), Ideal_N=integer(), Avg_Prop=numeric(), Avg_P=numeric(), Avg_N=integer(), Between_Prop=numeric(), Between_P=numeric(), Between_N=integer(), stringsAsFactors=FALSE)
+for(country in countries) {
+  res <- country_intermediacy_results_median_3sd[[country]]
+  if(!is.null(res)) {
+    # Extract p-values safely
+    ideal_p_val <- if(!is.null(res$ideal_side$test) && !is.null(res$ideal_side$test$p.value)) res$ideal_side$test$p.value else NA
+    avg_p_val <- if(!is.null(res$average_side$test) && !is.null(res$average_side$test$p.value)) res$average_side$test$p.value else NA
+    between_p_val <- if(!is.null(res$both_sides$test) && !is.null(res$both_sides$test$p.value)) res$both_sides$test$p.value else NA
+
+    intermediacy_by_country_median_3sd <- rbind(intermediacy_by_country_median_3sd, data.frame(Country=country,
+                                                                                                Ideal_Prop=res$ideal_side$prop, Ideal_P=ideal_p_val, Ideal_N=res$ideal_side$n,
+                                                                                                Avg_Prop=res$average_side$prop, Avg_P=avg_p_val, Avg_N=res$average_side$n,
+                                                                                                Between_Prop=res$both_sides$prop, Between_P=between_p_val, Between_N=res$both_sides$n,
+                                                                                                stringsAsFactors=FALSE))
+  } else {
+    intermediacy_by_country_median_3sd <- rbind(intermediacy_by_country_median_3sd, data.frame(Country=country, Ideal_Prop=NA, Ideal_P=NA, Ideal_N=0, Avg_Prop=NA, Avg_P=NA, Avg_N=0, Between_Prop=NA, Between_P=NA, Between_N=0, stringsAsFactors=FALSE))
+  }
+}
+
+# Format and display - THIS WILL RENDER CORRECTLY IN KNITTED HTML
+# Need to handle NAs before formatting
+intermediacy_by_country_median_3sd <- intermediacy_by_country_median_3sd %>%
+  mutate(
+    Ideal_Prop_Pct = ifelse(is.na(Ideal_Prop), NA, scales::percent(Ideal_Prop, accuracy = 0.1)),
+    Avg_Prop_Pct = ifelse(is.na(Avg_Prop), NA, scales::percent(Avg_Prop, accuracy = 0.1)),
+    Between_Prop_Pct = ifelse(is.na(Between_Prop), NA, scales::percent(Between_Prop, accuracy = 0.1)),
+    Ideal_Sig = ifelse(!is.na(Ideal_P) & Ideal_P < 0.05, "*", ""),
+    Avg_Sig = ifelse(!is.na(Avg_P) & Avg_P < 0.05, "*", ""),
+    Between_Sig = ifelse(!is.na(Between_P) & Between_P < 0.05, "*", "")
+  )
+
+# Arrange based on numeric proportion before formatting
+intermediacy_by_country_median_3sd <- intermediacy_by_country_median_3sd %>%
+  arrange(desc(Between_Prop)) # Arrange using the numeric column
+
+# Corrected select statement
+display_intermediacy_3sd <- intermediacy_by_country_median_3sd %>%
+  select(Country,
+         `Ideal Side (%)` = Ideal_Prop_Pct, Ideal_Sig = Ideal_Sig,
+         `Average Side (%)` = Avg_Prop_Pct, Average_Sig = Avg_Sig,
+         `Between (%)` = Between_Prop_Pct, Between_Sig = Between_Sig
+         )
+
+kable(display_intermediacy_3sd, caption = "Intermediacy Analysis by Country (Median, WITH 3SD Removal)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F) %>%
+  add_header_above(c(" " = 1, "Ideal Side (%)*" = 2, "Average Side (%)*" = 2, "Between (%)*" = 2)) %>%
+  column_spec(1, bold = T)
+
+
+# Store results
+analysis_8_results_3sd <- list(
+  country_results = country_intermediacy_results_median_3sd,
+  summary = intermediacy_by_country_median_3sd # Contains raw P values and formatted proportions
+)
+```
+
+# Plots for Publication
+
+### Figure 1: Visualization of Reasonable Medians by Country and Item [NO 3 SD Removed] NEEDS REVISION
+
+```{r}
+# Create a mapping for question numbers to descriptive labels
+question_labels <- c(
+  "q1" = "Hrs TV / day", "q2" = "Sugary drinks / wk", "q3" = "Exercise hrs / wk",
+  "q4" = "Calories / day", "q5" = "Vegetable servings / mo", "q6" = "Lies told / wk",
+  "q7" = "Mins doctor late", "q8" = "Books read / yr", "q9" = "Romantic partners / life",
+  "q10" = "Int'l conflicts / decade", "q11" = "Dollars cheated on taxes", "q12" = "% Cheating students",
+  "q13" = "Phone checks / day", "q14" = "Mins phone wait time", "q15" = "Calls to parent / mo",
+  "q16" = "House cleans / mo", "q17" = "Computer crashes / mo", "q18" = "% School dropouts",
+  "q20" = "% Kids bullied", "q21" = "College bro drinks / wknd", "q22" = "Days to accept contract",
+  "q23" = "Wks to return product", "q24" = "Hrs to reflect on offer", "q25" = "Extra costs ($10k build)",
+  "q26" = "Wks construction delay", "q27" = "Loud events near homes / yr", "q28" = "% Car profits on safety",
+  "q29" = "% Medical details desired", "q30" = "Wks wait for criminal trial", "q31" = "Hourly atty fee (charity)",
+  "q32" = "Hrs landlord entry notice", "q33" = "Loan interest rate (%)", "q34" = "Polluter recidivism (%)"
+)
+
+# Prepare the data for visualization
+prepare_figure1_data <- function() {
+  # Extract country information
+  countries <- unique(Data_All$Country_name)
+  
+  # Initialize empty dataframe
+  figure1_data <- data.frame()
+  
+  # Add Poland expert category if it exists
+  if("Poland_Expert" %in% countries) {
+    countries <- countries[countries != "Poland_Expert"]
+    countries <- c(countries, "Poland_Expert")
+  }
+  
+  # Process each country
+  for(country in countries) {
+    country_name <- country
+    if(country == "Poland_Expert") {
+      country_filter <- "Poland"
+      country_name <- "Poland_Expert"
+    } else {
+      country_filter <- country
+    }
+    
+    # Filter by country and condition
+    if(country == "Poland_Expert") {
+      # Special handling for Poland expert data if needed
+      country_avg <- Data_All_Average_Pass1 %>% 
+        filter(Country_name == country_filter, Expert == TRUE)
+      country_ideal <- Data_All_Ideal_Pass1 %>% 
+        filter(Country_name == country_filter, Expert == TRUE)
+      country_reasonable <- Data_All_Reasonable_Pass1 %>% 
+        filter(Country_name == country_filter, Expert == TRUE)
+    } else {
+      country_avg <- Data_All_Average_Pass1 %>% 
+        filter(Country_name == country_filter)
+      country_ideal <- Data_All_Ideal_Pass1 %>% 
+        filter(Country_name == country_filter)
+      country_reasonable <- Data_All_Reasonable_Pass1 %>% 
+        filter(Country_name == country_filter)
+    }
+    
+    # Calculate medians for each question by condition
+    for(q in question_cols) {
+      if(q %in% colnames(country_avg) && q %in% colnames(country_ideal) && q %in% colnames(country_reasonable)) {
+        # Calculate medians
+        median_avg <- median(as.numeric(country_avg[[q]]), na.rm = TRUE)
+        median_ideal <- median(as.numeric(country_ideal[[q]]), na.rm = TRUE)
+        median_reasonable <- median(as.numeric(country_reasonable[[q]]), na.rm = TRUE)
+        
+        # Add to dataframe
+        figure1_data <- rbind(figure1_data, data.frame(
+          Country = country_name,
+          Item = q,
+          Median_average = median_avg,
+          Median_ideal = median_ideal,
+          Median_reasonable = median_reasonable
+        ))
+      }
+    }
+  }
+  
+  return(figure1_data)
+}
+
+# Generate the data
+figure1_data <- prepare_figure1_data()
+
+# Process the data to match the paper's visualization
+processed_data <- figure1_data %>%
+  mutate(
+    Item_label = question_labels[Item],
+    Color = ifelse(Median_reasonable >= Median_average & Median_reasonable <= Median_ideal |
+                   Median_reasonable <= Median_average & Median_reasonable >= Median_ideal, 
+                  "navy", "firebrick"),
+    Shape = case_when(
+      Median_ideal < Median_average ~ 'Less',      # Downward triangle
+      Median_ideal > Median_average ~ 'More',      # Upward triangle  
+      Median_ideal == Median_average ~ 'Equal'     # Circle
+    ),
+    Ratio = log2(Median_ideal/Median_average)
+  )
+
+# Calculate the ratio for ordering items
+item_ratios <- processed_data %>%
+  group_by(Item) %>%
+  summarize(Avg_ratio = mean(Ratio, na.rm = TRUE))
+
+# Join with the processed data
+processed_data <- processed_data %>%
+  left_join(item_ratios, by = "Item")
+
+# Define country abbreviation labels
+CountryLabels = c(
+  'Brazil' = 'BR', 
+  'Colombia' = 'CO',
+  'Germany' = 'DE',
+  'India' = 'IN',
+  'Italy' = 'IT',
+  'Lithuania' = 'LT',
+  'Netherlands' = 'NL',
+  'Poland' = 'PL',
+  'Poland_Expert' = 'PL*',
+  'Spain' = 'ES',
+  'USA' = 'US'
+)
+
+# Update country names to use abbreviations for plotting
+processed_data$Country_label <- CountryLabels[processed_data$Country]
+
+# Create the figure
+figure1 <- ggplot(processed_data, 
+                  aes(x = Country, y = reorder(Item_label, Avg_ratio), 
+                      fill = Color, color = Color)) + 
+  geom_point(aes(shape = Shape), size = 5, alpha = 0.9, stroke = 1) + 
+  geom_text(aes(label = round(Median_reasonable)), 
+            size = 2.5, color = "white") + 
+  scale_fill_identity() +
+  scale_color_identity() +
+  scale_shape_manual(values = c('Equal' = 21, 'Less' = 25, 'More' = 24)) +
+  scale_x_discrete(labels = CountryLabels, position = "top") +
+  theme_minimal() +
+  theme(
+    axis.title = element_blank(),
+    legend.position = "none",
+    text = element_text(color = "black"),
+    axis.text.x = element_text(face = "bold", color = "black", size = 10),
+    axis.text.y = element_text(size = 9),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+# Display the figure
+print(figure1)
+
+# Save the figure
+ggsave("Figure1_Reasonableness.jpg", figure1, dpi = 300, width = 16, height = 25, units = "cm")
+```
+
+### Figure 1: Visualization of Reasonable Medians by Country and Item [WITH 3 SD Removed] NEEDS REVISION
+
+```{r}
+# Create a mapping for question numbers to descriptive labels
+question_labels <- c(
+  "q1" = "Hrs TV / day", "q2" = "Sugary drinks / wk", "q3" = "Exercise hrs / wk",
+  "q4" = "Calories / day", "q5" = "Vegetable servings / mo", "q6" = "Lies told / wk",
+  "q7" = "Mins doctor late", "q8" = "Books read / yr", "q9" = "Romantic partners / life",
+  "q10" = "Int'l conflicts / decade", "q11" = "Dollars cheated on taxes", "q12" = "% Cheating students",
+  "q13" = "Phone checks / day", "q14" = "Mins phone wait time", "q15" = "Calls to parent / mo",
+  "q16" = "House cleans / mo", "q17" = "Computer crashes / mo", "q18" = "% School dropouts",
+  "q20" = "% Kids bullied", "q21" = "College bro drinks / wknd", "q22" = "Days to accept contract",
+  "q23" = "Wks to return product", "q24" = "Hrs to reflect on offer", "q25" = "Extra costs ($10k build)",
+  "q26" = "Wks construction delay", "q27" = "Loud events near homes / yr", "q28" = "% Car profits on safety",
+  "q29" = "% Medical details desired", "q30" = "Wks wait for criminal trial", "q31" = "Hourly atty fee (charity)",
+  "q32" = "Hrs landlord entry notice", "q33" = "Loan interest rate (%)", "q34" = "Polluter recidivism (%)"
+)
+
+# Prepare the data for visualization
+prepare_figure1_data <- function() {
+  # Extract country information
+  countries <- unique(Data_All$Country_name)
+  
+  # Initialize empty dataframe
+  figure1_data <- data.frame()
+  
+  # Add Poland expert category if it exists
+  if("Poland_Expert" %in% countries) {
+    countries <- countries[countries != "Poland_Expert"]
+    countries <- c(countries, "Poland_Expert")
+  }
+  
+  # Process each country
+  for(country in countries) {
+    country_name <- country
+    if(country == "Poland_Expert") {
+      country_filter <- "Poland"
+      country_name <- "Poland_Expert"
+    } else {
+      country_filter <- country
+    }
+    
+    # Filter by country and condition
+    if(country == "Poland_Expert") {
+      # Special handling for Poland expert data if needed
+      country_avg <- Data_All_Average_Filtered %>% 
+        filter(Country_name == country_filter, Expert == TRUE)
+      country_ideal <- Data_All_Ideal_Filtered %>% 
+        filter(Country_name == country_filter, Expert == TRUE)
+      country_reasonable <- Data_All_Reasonable_Filtered %>% 
+        filter(Country_name == country_filter, Expert == TRUE)
+    } else {
+      country_avg <- Data_All_Average_Filtered %>% 
+        filter(Country_name == country_filter)
+      country_ideal <- Data_All_Ideal_Filtered %>% 
+        filter(Country_name == country_filter)
+      country_reasonable <- Data_All_Reasonable_Filtered %>% 
+        filter(Country_name == country_filter)
+    }
+    
+    # Calculate medians for each question by condition
+    for(q in question_cols) {
+      if(q %in% colnames(country_avg) && q %in% colnames(country_ideal) && q %in% colnames(country_reasonable)) {
+        # Calculate medians
+        median_avg <- median(as.numeric(country_avg[[q]]), na.rm = TRUE)
+        median_ideal <- median(as.numeric(country_ideal[[q]]), na.rm = TRUE)
+        median_reasonable <- median(as.numeric(country_reasonable[[q]]), na.rm = TRUE)
+        
+        # Add to dataframe
+        figure1_data <- rbind(figure1_data, data.frame(
+          Country = country_name,
+          Item = q,
+          Median_average = median_avg,
+          Median_ideal = median_ideal,
+          Median_reasonable = median_reasonable
+        ))
+      }
+    }
+  }
+  
+  return(figure1_data)
+}
+
+# Generate the data
+figure1_data <- prepare_figure1_data()
+
+# Process the data to match the paper's visualization
+processed_data <- figure1_data %>%
+  mutate(
+    Item_label = question_labels[Item],
+    Color = ifelse(Median_reasonable >= Median_average & Median_reasonable <= Median_ideal |
+                   Median_reasonable <= Median_average & Median_reasonable >= Median_ideal, 
+                  "navy", "firebrick"),
+    Shape = case_when(
+      Median_ideal < Median_average ~ 'Less',      # Downward triangle
+      Median_ideal > Median_average ~ 'More',      # Upward triangle  
+      Median_ideal == Median_average ~ 'Equal'     # Circle
+    ),
+    Ratio = log2(Median_ideal/Median_average)
+  )
+
+# Calculate the ratio for ordering items
+item_ratios <- processed_data %>%
+  group_by(Item) %>%
+  summarize(Avg_ratio = mean(Ratio, na.rm = TRUE))
+
+# Join with the processed data
+processed_data <- processed_data %>%
+  left_join(item_ratios, by = "Item")
+
+# Define country abbreviation labels
+CountryLabels = c(
+  'Brazil' = 'BR', 
+  'Colombia' = 'CO',
+  'Germany' = 'DE',
+  'India' = 'IN',
+  'Italy' = 'IT',
+  'Lithuania' = 'LT',
+  'Netherlands' = 'NL',
+  'Poland' = 'PL',
+  'Poland_Expert' = 'PL*',
+  'Spain' = 'ES',
+  'USA' = 'US'
+)
+
+# Update country names to use abbreviations for plotting
+processed_data$Country_label <- CountryLabels[processed_data$Country]
+
+# Create the figure
+figure1 <- ggplot(processed_data, 
+                  aes(x = Country, y = reorder(Item_label, Avg_ratio), 
+                      fill = Color, color = Color)) + 
+  geom_point(aes(shape = Shape), size = 5, alpha = 0.9, stroke = 1) + 
+  geom_text(aes(label = round(Median_reasonable)), 
+            size = 2.5, color = "white") + 
+  scale_fill_identity() +
+  scale_color_identity() +
+  scale_shape_manual(values = c('Equal' = 21, 'Less' = 25, 'More' = 24)) +
+  scale_x_discrete(labels = CountryLabels, position = "top") +
+  theme_minimal() +
+  theme(
+    axis.title = element_blank(),
+    legend.position = "none",
+    text = element_text(color = "black"),
+    axis.text.x = element_text(face = "bold", color = "black", size = 10),
+    axis.text.y = element_text(size = 9),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+# Display the figure
+print(figure1)
+
+# Save the figure
+ggsave("Figure1_Reasonableness.jpg", figure1, dpi = 300, width = 16, height = 25, units = "cm")
+```
