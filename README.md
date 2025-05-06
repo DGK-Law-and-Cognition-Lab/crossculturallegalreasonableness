@@ -40,7 +40,7 @@ Contains raw data files for the experiment.
 
 ### Figures
 
-This contains the data visualization generated in R and included in the paper. See [here](https://dgk-law-and-cognition-lab.github.io/natureofreasonableness_crosscultural/Figures/Figure1_Reasonableness_Filtered.jpg) and [here](https://dgk-law-and-cognition-lab.github.io/natureofreasonableness_crosscultural/Figures/Figure1_Reasonableness_NoFilter.jpg)for your own viewing.
+This contains the data visualization generated in R and included in the paper. See [here](https://dgk-law-and-cognition-lab.github.io/natureofreasonableness_crosscultural/Figures/Figure1_Reasonableness_Filtered.jpg) and [here](https://dgk-law-and-cognition-lab.github.io/natureofreasonableness_crosscultural/Figures/Figure1_Reasonableness_NoFilter.jpg) for your own viewing.
 
 ## Paper Results
 
